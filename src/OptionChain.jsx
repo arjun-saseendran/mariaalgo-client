@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { ArrowLeft, RefreshCw, Plus, Minus, Zap } from "lucide-react";
 
 const LOT_SIZE    = { NIFTY: 65, SENSEX: 20 };
-const STRIKE_RANGE = 20;
+const STRIKE_RANGE = 30;
 
 // ─── Color tokens (all verified visible on #070709 background) ───────────────
 const C = {
@@ -18,11 +18,13 @@ const C = {
 };
 
 // ─── ActionablePriceCell ──────────────────────────────────────────────────────
-const ActionablePriceCell = ({ typeCEPE, strike, price, chp, oi, vol, onAddLeg, selectedLegs }) => {
+const ActionablePriceCell = ({ typeCEPE, strike, price, chp, oi, oiRaw, maxOiRaw, vol, onAddLeg, selectedLegs }) => {
   const isBuySelected  = selectedLegs.some(l => l.strike === strike && l.optionType === typeCEPE && l.type === "BUY");
   const isSellSelected = selectedLegs.some(l => l.strike === strike && l.optionType === typeCEPE && l.type === "SELL");
   const chpColor = chp > 0 ? C.green : chp < 0 ? C.red : C.textFaint;
   const hasPrice = price > 0;
+  const oiBarPct   = maxOiRaw > 0 ? Math.min(100, (oiRaw / maxOiRaw) * 100) : 0;
+  const oiBarColor = typeCEPE === "CE" ? "rgba(248,113,113,0.5)" : "rgba(52,211,153,0.5)";
 
   return (
     <div style={{ display: "flex", alignItems: "stretch", height: "100%", minHeight: 48 }}>
@@ -65,6 +67,11 @@ const ActionablePriceCell = ({ typeCEPE, strike, price, chp, oi, vol, onAddLeg, 
         <span style={{ fontSize: 8.5, color: C.textMuted, lineHeight: 1.2, marginTop: 1 }}>  {/* ← was #374151 */}
           {oi} · {vol}
         </span>
+        {oiBarPct > 0 && (
+          <div style={{ width: "80%", height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginTop: 3, overflow: "hidden" }}>
+            <div style={{ width: oiBarPct + "%", height: "100%", background: oiBarColor, borderRadius: 2, transition: "width 0.4s ease" }} />
+          </div>
+        )}
       </div>
 
       {/* SELL — full height, 52px wide, flush to LTP */}
@@ -234,7 +241,9 @@ const OptionChain = ({ onClose }) => {
         ) : (
           <table style={{ width:"100%", borderCollapse:"collapse" }}>
             <tbody>
-              {chainData.map((row, i) => {
+              {(() => {
+                const maxOiRaw = Math.max(1, ...chainData.map(r => Math.max(r.ce.oiRaw || 0, r.pe.oiRaw || 0)));
+                return chainData.map((row, i) => {
                 const isATM     = row.strike === atmStrike;
                 const isITMCall = spotPrice && row.strike < spotPrice;
                 const isITMPut  = spotPrice && row.strike > spotPrice;
@@ -244,7 +253,7 @@ const OptionChain = ({ onClose }) => {
                     background: isATM ? "rgba(30,58,138,0.2)" : "transparent",
                   }}>
                     <td style={{ width:"42%", padding:"2px 6px 2px 3px", background:isITMCall?"rgba(127,29,29,0.08)":"transparent" }}>
-                      <ActionablePriceCell typeCEPE="CE" strike={row.strike} price={row.ce.ltp} chp={row.ce.chp} oi={row.ce.oi} vol={row.ce.vol} onAddLeg={addLeg} selectedLegs={selectedLegs}/>
+                      <ActionablePriceCell typeCEPE="CE" strike={row.strike} price={row.ce.ltp} chp={row.ce.chp} oi={row.ce.oi} oiRaw={row.ce.oiRaw || 0} maxOiRaw={maxOiRaw} vol={row.ce.vol} onAddLeg={addLeg} selectedLegs={selectedLegs}/>
                     </td>
                     <td style={{ width:76, textAlign:"center", padding:"4px 0" }}>
                       <div style={{ fontFamily:C.mono, fontSize:isATM?13:11.5, fontWeight:isATM?900:600, color:isATM?"#60a5fa":C.textMuted }}>
@@ -253,11 +262,11 @@ const OptionChain = ({ onClose }) => {
                       {isATM && <div style={{ fontSize:8, color:"#3b82f6", textTransform:"uppercase", letterSpacing:"0.1em", marginTop:1 }}>ATM</div>}
                     </td>
                     <td style={{ width:"42%", padding:"2px 3px 2px 6px", background:isITMPut?"rgba(6,78,59,0.09)":"transparent" }}>
-                      <ActionablePriceCell typeCEPE="PE" strike={row.strike} price={row.pe.ltp} chp={row.pe.chp} oi={row.pe.oi} vol={row.pe.vol} onAddLeg={addLeg} selectedLegs={selectedLegs}/>
+                      <ActionablePriceCell typeCEPE="PE" strike={row.strike} price={row.pe.ltp} chp={row.pe.chp} oi={row.pe.oi} oiRaw={row.pe.oiRaw || 0} maxOiRaw={maxOiRaw} vol={row.pe.vol} onAddLeg={addLeg} selectedLegs={selectedLegs}/>
                     </td>
                   </tr>
                 );
-              })}
+              });})()}
             </tbody>
           </table>
         )}
