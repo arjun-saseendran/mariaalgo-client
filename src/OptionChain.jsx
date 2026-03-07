@@ -1,115 +1,114 @@
 import React, { useState, useEffect, useRef } from "react";
-import { ArrowLeft, RefreshCw, Plus, Minus, Zap } from "lucide-react";
+import { ArrowLeft, RefreshCw, Plus, Minus, Zap, AlertTriangle } from "lucide-react";
 
 const LOT_SIZE    = { NIFTY: 65, SENSEX: 20 };
 const STRIKE_RANGE = 30;
-// ✅ FIX: was inverted — if VITE_API_URL set it used hardcoded localhost:3000 instead of the env value
-const SERVER_URL = import.meta.env.VITE_API_URL
+// Iron Condor server — all option chain and basket execution routes live here
+const IC_URL  = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL
   : "https://api.mariaalgo.online";
 
-
-// ─── Color tokens (all verified visible on #070709 background) ───────────────
+/* ── Color tokens ──────────────────────────────────────────────────────────── */
 const C = {
-  text:      "#e5e7eb",   // primary
-  textMuted: "#9ca3af",   // secondary labels
-  textFaint: "#6b7280",   // tertiary / meta info  ← was #374151 (invisible)
-  textDead:  "#4b5563",   // truly disabled
+  bg:        "#07070a",
+  bgCard:    "#0d0d11",
+  bgHeader:  "#09090e",
+  border:    "rgba(255,255,255,0.06)",
+  borderFocus:"rgba(99,102,241,0.4)",
+  text:      "#e2e8f0",
+  textMuted: "#94a3b8",
+  textFaint: "#64748b",
+  textDead:  "#334155",
   green:     "#34d399",
+  greenDim:  "rgba(52,211,153,0.15)",
   red:       "#f87171",
+  redDim:    "rgba(248,113,113,0.15)",
   blue:      "#60a5fa",
-  blueDark:  "#2563eb",
-  mono:      "'JetBrains Mono', monospace",
+  blueDim:   "rgba(96,165,250,0.1)",
+  blueDark:  "#1d4ed8",
+  amber:     "#fbbf24",
+  mono:      "'IBM Plex Mono', 'Fira Code', monospace",
+  sans:      "'DM Sans', system-ui, sans-serif",
 };
 
-// ─── ActionablePriceCell ──────────────────────────────────────────────────────
-const ActionablePriceCell = ({ typeCEPE, strike, price, chp, oi, oiRaw, maxOiRaw, vol, onAddLeg, selectedLegs, marketClosed }) => {
-  const isBuySelected  = selectedLegs.some(l => l.strike === strike && l.optionType === typeCEPE && l.type === "BUY");
-  const isSellSelected = selectedLegs.some(l => l.strike === strike && l.optionType === typeCEPE && l.type === "SELL");
-  const chpColor = chp > 0 ? C.green : chp < 0 ? C.red : C.textFaint;
-  const hasPrice = price > 0;
-  const hasOI    = oiRaw > 0;
-  const oiBarPct   = maxOiRaw > 0 ? Math.min(100, (oiRaw / maxOiRaw) * 100) : 0;
-  const oiBarColor = typeCEPE === "CE" ? "rgba(248,113,113,0.5)" : "rgba(52,211,153,0.5)";
+/* ── ActionablePriceCell ──────────────────────────────────────────────────── */
+const ActionablePriceCell = ({ typeCEPE, strike, price, chp, oi, oiRaw, maxOiRaw, vol, onAddLeg, selectedLegs }) => {
+  const isBuy  = selectedLegs.some(l => l.strike === strike && l.optionType === typeCEPE && l.type === "BUY");
+  const isSell = selectedLegs.some(l => l.strike === strike && l.optionType === typeCEPE && l.type === "SELL");
+  const chpColor  = chp > 0 ? C.green : chp < 0 ? C.red : C.textFaint;
+  const hasPrice  = price > 0;
+  const oiBarPct  = maxOiRaw > 0 ? Math.min(100, (oiRaw / maxOiRaw) * 100) : 0;
+  const oiBarClr  = typeCEPE === "CE" ? "rgba(248,113,113,0.55)" : "rgba(52,211,153,0.55)";
+
+  const btnBase = {
+    width: 48, minWidth: 48, flexShrink: 0,
+    fontWeight: 900, fontSize: 11, letterSpacing: "0.06em",
+    cursor: "pointer", transition: "all 0.12s",
+    display: "flex", alignItems: "center", justifyContent: "center", border: "none",
+  };
 
   return (
-    <div style={{ display: "flex", alignItems: "stretch", height: "100%", minHeight: 48 }}>
-
-      {/* BUY */}
+    <div style={{ display: "flex", alignItems: "stretch", height: "100%", minHeight: 52 }}>
+      {/* BUY button */}
       <button
         onClick={() => onAddLeg("BUY", strike, typeCEPE, price)}
         style={{
-          width: 52, minWidth: 52, flexShrink: 0,
-          background: isBuySelected ? "#1d4ed8" : "rgba(37,99,235,0.10)",
-          border: isBuySelected ? "1px solid #3b82f6" : "1px solid rgba(59,130,246,0.22)",
-          borderRight: "none", borderRadius: "7px 0 0 7px",
-          color: isBuySelected ? "#fff" : "#93c5fd",
-          fontWeight: 900, fontSize: 12, letterSpacing: "0.05em",
-          cursor: "pointer", transition: "background 0.1s",
-          display: "flex", alignItems: "center", justifyContent: "center",
+          ...btnBase,
+          background: isBuy ? "#1d4ed8" : "rgba(29,78,216,0.08)",
+          borderRadius: "8px 0 0 8px",
+          color: isBuy ? "#fff" : "#93c5fd",
+          boxShadow: isBuy ? "inset 0 0 0 1px #3b82f6" : "inset 0 0 0 1px rgba(59,130,246,0.18)",
         }}
-        onMouseEnter={e => { if (!isBuySelected) { e.currentTarget.style.background = "rgba(37,99,235,0.22)"; e.currentTarget.style.color = "#bfdbfe"; }}}
-        onMouseLeave={e => { if (!isBuySelected) { e.currentTarget.style.background = "rgba(37,99,235,0.10)"; e.currentTarget.style.color = "#93c5fd"; }}}
+        onMouseEnter={e => { if (!isBuy) { e.currentTarget.style.background = "rgba(29,78,216,0.18)"; e.currentTarget.style.color = "#bfdbfe"; }}}
+        onMouseLeave={e => { if (!isBuy) { e.currentTarget.style.background = "rgba(29,78,216,0.08)"; e.currentTarget.style.color = "#93c5fd"; }}}
       >B</button>
 
-      {/* Price info */}
+      {/* Price data */}
       <div style={{
         flex: 1, minWidth: 0,
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        padding: "3px 5px",
-        background: "rgba(255,255,255,0.025)",
-        borderTop: "1px solid rgba(255,255,255,0.05)",
-        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        padding: "4px 6px",
+        background: "rgba(255,255,255,0.018)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -1px 0 rgba(255,255,255,0.04)",
       }}>
-        {/* LTP */}
-        <span style={{ fontFamily: C.mono, fontWeight: 700, fontSize: 12.5, letterSpacing: "-0.02em", lineHeight: 1.2,
-          color: hasPrice ? C.text : C.textDead }}>
+        <span style={{ fontFamily: C.mono, fontWeight: 700, fontSize: 12.5, letterSpacing: "-0.025em", lineHeight: 1.2, color: hasPrice ? C.text : C.textDead }}>
           {hasPrice ? price.toFixed(2) : "—"}
         </span>
-
-        {/* % change */}
         {chp !== 0 && (
-          <span style={{ fontSize: 9.5, color: chpColor, fontWeight: 700, lineHeight: 1.2, marginTop: 1 }}>
+          <span style={{ fontSize: 9, color: chpColor, fontWeight: 700, lineHeight: 1.2, marginTop: 1 }}>
             {chp > 0 ? "+" : ""}{chp?.toFixed(1)}%
           </span>
         )}
-
-        {/* OI · Vol */}
-        {(hasOI || hasPrice) && (
-          <span style={{ fontSize: 8.5, color: C.textMuted, lineHeight: 1.2, marginTop: 1 }}>
+        {(oiRaw > 0 || hasPrice) && (
+          <span style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.2, marginTop: 1 }}>
             {oi} · {vol}
           </span>
         )}
-
-        {/* OI bar */}
         {oiBarPct > 0 && (
-          <div style={{ width: "80%", height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginTop: 3, overflow: "hidden" }}>
-            <div style={{ width: oiBarPct + "%", height: "100%", background: oiBarColor, borderRadius: 2, transition: "width 0.4s ease" }} />
+          <div style={{ width: "80%", height: 2.5, background: "rgba(255,255,255,0.05)", borderRadius: 2, marginTop: 3, overflow: "hidden" }}>
+            <div style={{ width: oiBarPct + "%", height: "100%", background: oiBarClr, borderRadius: 2, transition: "width 0.4s ease" }} />
           </div>
         )}
       </div>
 
-      {/* SELL */}
+      {/* SELL button */}
       <button
         onClick={() => onAddLeg("SELL", strike, typeCEPE, price)}
         style={{
-          width: 52, minWidth: 52, flexShrink: 0,
-          background: isSellSelected ? "#b91c1c" : "rgba(239,68,68,0.10)",
-          border: isSellSelected ? "1px solid #ef4444" : "1px solid rgba(239,68,68,0.22)",
-          borderLeft: "none", borderRadius: "0 7px 7px 0",
-          color: isSellSelected ? "#fff" : "#fca5a5",
-          fontWeight: 900, fontSize: 12, letterSpacing: "0.05em",
-          cursor: "pointer", transition: "background 0.1s",
-          display: "flex", alignItems: "center", justifyContent: "center",
+          ...btnBase,
+          background: isSell ? "#b91c1c" : "rgba(185,28,28,0.08)",
+          borderRadius: "0 8px 8px 0",
+          color: isSell ? "#fff" : "#fca5a5",
+          boxShadow: isSell ? "inset 0 0 0 1px #ef4444" : "inset 0 0 0 1px rgba(239,68,68,0.18)",
         }}
-        onMouseEnter={e => { if (!isSellSelected) { e.currentTarget.style.background = "rgba(239,68,68,0.22)"; e.currentTarget.style.color = "#fecaca"; }}}
-        onMouseLeave={e => { if (!isSellSelected) { e.currentTarget.style.background = "rgba(239,68,68,0.10)"; e.currentTarget.style.color = "#fca5a5"; }}}
+        onMouseEnter={e => { if (!isSell) { e.currentTarget.style.background = "rgba(185,28,28,0.18)"; e.currentTarget.style.color = "#fecaca"; }}}
+        onMouseLeave={e => { if (!isSell) { e.currentTarget.style.background = "rgba(185,28,28,0.08)"; e.currentTarget.style.color = "#fca5a5"; }}}
       >S</button>
     </div>
   );
 };
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+/* ── Main ─────────────────────────────────────────────────────────────────── */
 const OptionChain = ({ onClose }) => {
   const [symbol,       setSymbol]       = useState("NIFTY");
   const [lots,         setLots]         = useState(1);
@@ -123,7 +122,7 @@ const OptionChain = ({ onClose }) => {
   const [lastUpdated,  setLastUpdated]  = useState(null);
   const [marketClosed, setMarketClosed] = useState(false);
   const [fetchError,   setFetchError]   = useState(null);
-  const [dataSource,   setDataSource]   = useState(null); // 'UPSTOX_LIVE' | 'UPSTOX_LAST_SESSION'
+  const [dataSource,   setDataSource]   = useState(null);
   const atmRowRef = useRef(null);
 
   const lotSize  = LOT_SIZE[symbol] || 65;
@@ -131,13 +130,8 @@ const OptionChain = ({ onClose }) => {
 
   const fetchChain = async () => {
     try {
-      const res = await fetch(`${SERVER_URL}/api/options/chain?symbol=${symbol}&strikes=${STRIKE_RANGE}`);
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        setFetchError(errBody.error || `Server error ${res.status}`);
-        setMarketClosed(false);
-        return;
-      }
+      const res = await fetch(`${IC_URL}/api/options/chain?symbol=${symbol}&strikes=${STRIKE_RANGE}`);
+      if (!res.ok) { const e = await res.json().catch(() => ({})); setFetchError(e.error || `Server error ${res.status}`); return; }
       const data = await res.json();
       if (data.error) { setFetchError(data.error); return; }
       if (data.chain) {
@@ -148,22 +142,14 @@ const OptionChain = ({ onClose }) => {
         setMarketClosed(!!data.marketClosed);
         setDataSource(data.dataSource || null);
         setFetchError(null);
-        // Always update timestamp — last-session data has a meaningful fetch time too
         setLastUpdated(new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }));
       }
     } catch (err) {
-      console.error("Option chain fetch failed:", err);
       setFetchError("Failed to reach server");
     } finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    setLoading(true); setChainData([]); setLots(1); fetchChain();
-    // Poll fast when live, slow when closed (last-session data doesn't change)
-    const interval = marketClosed ? 60000 : 5000;
-    const itv = setInterval(fetchChain, interval);
-    return () => clearInterval(itv);
-  }, [symbol, marketClosed]);
+  useEffect(() => { setLoading(true); setChainData([]); setLots(1); fetchChain(); const itv = setInterval(fetchChain, marketClosed ? 60000 : 5000); return () => clearInterval(itv); }, [symbol, marketClosed]);
   useEffect(() => { if (atmRowRef.current) setTimeout(() => atmRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 150); }, [atmStrike]);
   useEffect(() => { if (selectedLegs.length > 0) setSelectedLegs(prev => prev.map(l => ({ ...l, lots, qty: lots * lotSize }))); }, [lots]);
 
@@ -177,12 +163,12 @@ const OptionChain = ({ onClose }) => {
     if (!window.confirm(`Execute ${selectedLegs.length} legs × ${lots} lot${lots > 1 ? "s" : ""} = ${totalQty} qty?`)) return;
     setIsExecuting(true);
     try {
-      const res = await fetch(`${SERVER_URL}/api/trades/execute-basket`, {  // ✅ FIX: was hardcoded prod URL
+      const res = await fetch(`${IC_URL}/api/trades/execute-basket`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ symbol, lots, legs: selectedLegs }),
       });
       if (res.ok) { alert("✅ Execution Success!"); setSelectedLegs([]); } else alert("❌ Execution Failed");
-    } catch (err) { alert("❌ Execution Failed: " + err.message); }
+    } catch (err) { alert("❌ " + err.message); }
     finally { setIsExecuting(false); }
   };
 
@@ -190,208 +176,245 @@ const OptionChain = ({ onClose }) => {
   const totalPnL     = totalPremium * totalQty;
 
   return (
-    <div style={{ height: "100vh", background: "#070709", color: C.text, display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: "'DM Sans', sans-serif" }}>
+    <div style={{ height: "100vh", background: C.bg, color: C.text, display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: C.sans }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
-        ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-track{background:transparent} ::-webkit-scrollbar-thumb{background:#374151;border-radius:4px}
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700;0,9..40,900&family=IBM+Plex+Mono:wght@400;700&display=swap');
+        ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#1e293b;border-radius:4px}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
       `}</style>
 
-      {/* Header */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", borderBottom:"1px solid #111827", padding:"10px 16px", flexShrink:0, background:"#08080a" }}>
+      {/* ── Header ── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${C.border}`, padding: "10px 16px", flexShrink: 0, background: C.bgHeader }}>
+
         <button onClick={onClose}
-          style={{ display:"flex", alignItems:"center", gap:6, background:"#111827", border:"1px solid #1f2937", color:C.textMuted, padding:"6px 12px", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer" }}
-          onMouseEnter={e=>e.currentTarget.style.color=C.text} onMouseLeave={e=>e.currentTarget.style.color=C.textMuted}>
-          <ArrowLeft size={11}/> Back
+          style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, color: C.textMuted, padding: "7px 14px", borderRadius: 10, fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.12s", fontFamily: C.sans }}
+          onMouseEnter={e => { e.currentTarget.style.color = C.text; e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
+          onMouseLeave={e => { e.currentTarget.style.color = C.textMuted; e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}>
+          <ArrowLeft size={11} /> Back
         </button>
 
-        <div style={{ textAlign:"center" }}>
-          {spotPrice && (
-            <div style={{ fontFamily:C.mono, fontWeight:700, fontSize:17, letterSpacing:"-0.02em", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-              <span style={{ color:C.textMuted }}>{symbol}</span>
-              <span style={{ color: marketClosed ? "#fbbf24" : C.green }}>₹{spotPrice?.toLocaleString("en-IN")}</span>
-              {marketClosed && (
-                <span style={{ fontSize:9, fontWeight:800, color:"#d97706", background:"rgba(217,119,6,0.12)", border:"1px solid rgba(217,119,6,0.25)", borderRadius:4, padding:"2px 6px", letterSpacing:"0.06em", textTransform:"uppercase" }}>
-                  Last Session
+        {/* Spot price center */}
+        <div style={{ textAlign: "center" }}>
+          {spotPrice ? (
+            <>
+              <div style={{ fontFamily: C.mono, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                <span style={{ fontSize: 11, color: C.textFaint, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>{symbol}</span>
+                <span style={{ fontSize: 20, fontWeight: 700, color: marketClosed ? C.amber : C.green, letterSpacing: "-0.03em" }}>
+                  ₹{spotPrice?.toLocaleString("en-IN")}
                 </span>
-              )}
-            </div>
+                {marketClosed && (
+                  <span style={{ fontSize: 8, fontWeight: 800, color: "#b45309", background: "rgba(180,83,9,0.1)", border: "1px solid rgba(180,83,9,0.22)", borderRadius: 5, padding: "2px 7px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                    Last Session
+                  </span>
+                )}
+                {!marketClosed && dataSource === "UPSTOX_LIVE" && (
+                  <span style={{ fontSize: 8, fontWeight: 800, color: "#059669", background: "rgba(5,150,105,0.08)", border: "1px solid rgba(5,150,105,0.2)", borderRadius: 5, padding: "2px 7px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                    ● Live
+                  </span>
+                )}
+              </div>
+              {expiry && <div style={{ fontSize: 9, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 2 }}>Expiry {expiry}</div>}
+            </>
+          ) : (
+            <div style={{ fontSize: 11, color: C.textFaint }}>—</div>
           )}
-          {expiry && <div style={{ fontSize:9, color:C.textFaint, textTransform:"uppercase", letterSpacing:"0.1em", marginTop:2 }}>Expiry {expiry}</div>}
         </div>
 
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <div style={{ display:"flex", background:"#111827", borderRadius:8, padding:2, border:"1px solid #1f2937" }}>
-            {["NIFTY","SENSEX"].map(s=>(
-              <button key={s} onClick={()=>setSymbol(s)} style={{ padding:"5px 14px", borderRadius:6, fontSize:11, fontWeight:800, background:symbol===s?C.blueDark:"transparent", color:symbol===s?"#fff":C.textFaint, border:"none", cursor:"pointer" }}>{s}</button>
+        {/* Symbol + refresh */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: 3, border: `1px solid ${C.border}` }}>
+            {["NIFTY", "SENSEX"].map(s => (
+              <button key={s} onClick={() => setSymbol(s)}
+                style={{ padding: "5px 16px", borderRadius: 7, fontSize: 11, fontWeight: 800, background: symbol === s ? C.blueDark : "transparent", color: symbol === s ? "#fff" : C.textFaint, border: "none", cursor: "pointer", transition: "all 0.15s", fontFamily: C.sans }}>
+                {s}
+              </button>
             ))}
           </div>
-          <button onClick={fetchChain} style={{ color:C.textFaint, background:"none", border:"none", cursor:"pointer", padding:4, display:"flex" }}
-            onMouseEnter={e=>e.currentTarget.style.color=C.text} onMouseLeave={e=>e.currentTarget.style.color=C.textFaint}>
-            <RefreshCw size={13}/>
+          <button onClick={fetchChain}
+            style={{ color: C.textFaint, background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, cursor: "pointer", padding: "7px", display: "flex", borderRadius: 8, transition: "all 0.12s" }}
+            onMouseEnter={e => { e.currentTarget.style.color = C.text; e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
+            onMouseLeave={e => { e.currentTarget.style.color = C.textFaint; e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}>
+            <RefreshCw size={13} />
           </button>
         </div>
       </div>
 
-      {/* Lot selector */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 16px", borderBottom:"1px solid #0d1117", background:"#08080b", flexShrink:0 }}>
-        <span style={{ fontSize:9, color:C.textFaint, textTransform:"uppercase", letterSpacing:"0.1em" }}>
-          Lot Size <strong style={{ color:C.textMuted }}>{lotSize}</strong>
+      {/* ── Lot selector bar ── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px", borderBottom: `1px solid rgba(255,255,255,0.04)`, background: C.bgHeader, flexShrink: 0 }}>
+        <span style={{ fontSize: 9, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+          Lot Size <strong style={{ color: C.textMuted, fontFamily: C.mono }}>{lotSize}</strong>
         </span>
-        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <span style={{ fontSize:9, color:C.textFaint, textTransform:"uppercase", letterSpacing:"0.1em" }}>Lots</span>
-          <div style={{ display:"flex", alignItems:"center", gap:2, background:"#111827", borderRadius:8, padding:"3px 6px", border:"1px solid #1f2937" }}>
-            <button onClick={()=>setLots(l=>Math.max(1,l-1))} style={{ width:22, height:22, display:"flex", alignItems:"center", justifyContent:"center", background:"none", border:"none", color:C.textMuted, cursor:"pointer", borderRadius:4 }}
-              onMouseEnter={e=>{e.currentTarget.style.background="#1f2937";e.currentTarget.style.color=C.text}} onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=C.textMuted}}>
-              <Minus size={11}/>
-            </button>
-            <span style={{ fontFamily:C.mono, fontWeight:700, color:C.text, fontSize:13, minWidth:22, textAlign:"center" }}>{lots}</span>
-            <button onClick={()=>setLots(l=>Math.min(50,l+1))} style={{ width:22, height:22, display:"flex", alignItems:"center", justifyContent:"center", background:"none", border:"none", color:C.textMuted, cursor:"pointer", borderRadius:4 }}
-              onMouseEnter={e=>{e.currentTarget.style.background="#1f2937";e.currentTarget.style.color=C.text}} onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=C.textMuted}}>
-              <Plus size={11}/>
-            </button>
-          </div>
-          <span style={{ fontSize:11, color:C.green, fontWeight:800, fontFamily:C.mono }}>{totalQty} qty</span>
-        </div>
-        {lastUpdated && (
-          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-            {dataSource === 'UPSTOX_LAST_SESSION' && (
-              <span style={{ fontSize:8, fontWeight:800, color:"#d97706", background:"rgba(217,119,6,0.10)", border:"1px solid rgba(217,119,6,0.2)", borderRadius:3, padding:"1px 5px", textTransform:"uppercase", letterSpacing:"0.06em" }}>
-                Last Session
-              </span>
-            )}
-            {dataSource === 'UPSTOX_LIVE' && (
-              <span style={{ fontSize:8, fontWeight:800, color:"#34d399", background:"rgba(52,211,153,0.08)", border:"1px solid rgba(52,211,153,0.2)", borderRadius:3, padding:"1px 5px", textTransform:"uppercase", letterSpacing:"0.06em" }}>
-                ● Live
-              </span>
-            )}
-            <span style={{ fontSize:9, color:C.textFaint, fontFamily:C.mono }}>{lastUpdated}</span>
-          </div>
-        )}
-      </div>
 
-      {/* Column headers */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 76px 1fr", padding:"5px 4px", background:"#08080b", borderBottom:"1px solid #0d1117", flexShrink:0 }}>
-        <div style={{ display:"flex", alignItems:"center" }}>
-          <span style={{ width:52, textAlign:"center", fontSize:9, fontWeight:900, color:"#93c5fd", textTransform:"uppercase", letterSpacing:"0.08em" }}>BUY</span>
-          <span style={{ flex:1, textAlign:"center", fontSize:9, color:C.textFaint, textTransform:"uppercase", letterSpacing:"0.07em" }}>CALL · chg · OI</span>
-          {/* ↑ fixed: was #374151 */}
-          <span style={{ width:52, textAlign:"center", fontSize:9, fontWeight:900, color:"#fca5a5", textTransform:"uppercase", letterSpacing:"0.08em" }}>SELL</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 9, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em" }}>Lots</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 2, background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "3px 6px", border: `1px solid ${C.border}` }}>
+            <button onClick={() => setLots(l => Math.max(1, l - 1))}
+              style={{ width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: C.textMuted, cursor: "pointer", borderRadius: 5, transition: "all 0.1s" }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = C.text; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = C.textMuted; }}>
+              <Minus size={11} />
+            </button>
+            <span style={{ fontFamily: C.mono, fontWeight: 700, color: C.text, fontSize: 14, minWidth: 26, textAlign: "center" }}>{lots}</span>
+            <button onClick={() => setLots(l => Math.min(50, l + 1))}
+              style={{ width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: C.textMuted, cursor: "pointer", borderRadius: 5, transition: "all 0.1s" }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = C.text; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = C.textMuted; }}>
+              <Plus size={11} />
+            </button>
+          </div>
+          <span style={{ fontSize: 12, color: C.green, fontWeight: 800, fontFamily: C.mono }}>{totalQty}</span>
+          <span style={{ fontSize: 9, color: C.textFaint }}>qty</span>
         </div>
-        <div style={{ textAlign:"center", fontSize:9, color:C.textFaint, textTransform:"uppercase", letterSpacing:"0.08em", alignSelf:"center" }}>STRIKE</div>
-        <div style={{ display:"flex", alignItems:"center" }}>
-          <span style={{ width:52, textAlign:"center", fontSize:9, fontWeight:900, color:"#93c5fd", textTransform:"uppercase", letterSpacing:"0.08em" }}>BUY</span>
-          <span style={{ flex:1, textAlign:"center", fontSize:9, color:C.textFaint, textTransform:"uppercase", letterSpacing:"0.07em" }}>PUT · chg · OI</span>
-          <span style={{ width:52, textAlign:"center", fontSize:9, fontWeight:900, color:"#fca5a5", textTransform:"uppercase", letterSpacing:"0.08em" }}>SELL</span>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {lastUpdated && <span style={{ fontSize: 9, color: C.textFaint, fontFamily: C.mono }}>{lastUpdated}</span>}
         </div>
       </div>
 
-      {/* Table */}
-      <div style={{ flex:1, overflowY:"auto" }}>
+      {/* ── Column headers ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 72px 1fr", padding: "5px 3px", background: C.bgHeader, borderBottom: `1px solid rgba(255,255,255,0.03)`, flexShrink: 0 }}>
+        {[["CALL · OI · Vol", "CE"], ["PUT · OI · Vol", "PE"]].map(([label, side], idx) => (
+          <div key={side} style={{ display: "flex", alignItems: "center" }}>
+            {idx === 1 && <span style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.1em" }}>BUY</span>}
+            <span style={{ flex: 1, textAlign: "center", fontSize: 8, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</span>
+            {idx === 0 && <span style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#fca5a5", textTransform: "uppercase", letterSpacing: "0.1em" }}>SELL</span>}
+            {idx === 0 && <span style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.1em" }}>BUY</span>}
+            {idx === 1 && <span style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#fca5a5", textTransform: "uppercase", letterSpacing: "0.1em" }}>SELL</span>}
+          </div>
+        ))}
+        <div style={{ textAlign: "center", fontSize: 8, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", alignSelf: "center" }}>STRIKE</div>
+      </div>
+
+      {/* ── Chain table ── */}
+      <div style={{ flex: 1, overflowY: "auto" }}>
         {loading ? (
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100%", color:C.textMuted, gap:8, fontSize:13 }}>
-            <RefreshCw size={16} style={{ animation:"spin 1s linear infinite" }}/> Loading...
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: C.textMuted, gap: 10, fontSize: 13 }}>
+            <RefreshCw size={15} style={{ animation: "spin 1s linear infinite" }} />
+            Loading chain…
           </div>
         ) : fetchError ? (
-          /* ✅ FIX: fetchError was set but never shown — user saw blank spinner forever on API failure */
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"100%", gap:12 }}>
-            <div style={{ fontSize:12, color:"#f87171", fontWeight:700 }}>⚠ {fetchError}</div>
-            <button onClick={fetchChain} style={{ fontSize:11, color:C.textMuted, background:"#111827", border:"1px solid #1f2937", borderRadius:7, padding:"6px 16px", cursor:"pointer", fontWeight:700 }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 14 }}>
+            <AlertTriangle size={18} color="#f87171" />
+            <div style={{ fontSize: 12, color: "#f87171", fontWeight: 700 }}>{fetchError}</div>
+            <button onClick={fetchChain}
+              style={{ fontSize: 11, color: C.textMuted, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 8, padding: "7px 18px", cursor: "pointer", fontWeight: 700, fontFamily: C.sans }}>
               Retry
             </button>
           </div>
         ) : (
-          <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <tbody>
               {(() => {
                 const maxOiRaw = Math.max(1, ...chainData.map(r => Math.max(r.ce.oiRaw || 0, r.pe.oiRaw || 0)));
                 return chainData.map((row, i) => {
-                const isATM     = row.strike === atmStrike;
-                const isITMCall = spotPrice && row.strike < spotPrice;
-                const isITMPut  = spotPrice && row.strike > spotPrice;
-                return (
-                  <tr key={i} ref={isATM ? atmRowRef : null} style={{
-                    borderBottom: isATM ? "1px solid rgba(59,130,246,0.4)" : "1px solid rgba(255,255,255,0.035)",
-                    background: isATM ? "rgba(30,58,138,0.2)" : "transparent",
-                  }}>
-                    <td style={{ width:"42%", padding:"2px 6px 2px 3px", background:isITMCall?"rgba(127,29,29,0.08)":"transparent" }}>
-                      <ActionablePriceCell typeCEPE="CE" strike={row.strike} price={row.ce.ltp} chp={row.ce.chp} oi={row.ce.oi} oiRaw={row.ce.oiRaw || 0} maxOiRaw={maxOiRaw} vol={row.ce.vol} onAddLeg={addLeg} selectedLegs={selectedLegs} marketClosed={marketClosed}/>
-                    </td>
-                    <td style={{ width:76, textAlign:"center", padding:"4px 0" }}>
-                      <div style={{ fontFamily:C.mono, fontSize:isATM?13:11.5, fontWeight:isATM?900:600, color:isATM?"#60a5fa":C.textMuted }}>
-                        {row.strike}
-                      </div>
-                      {isATM && <div style={{ fontSize:8, color:"#3b82f6", textTransform:"uppercase", letterSpacing:"0.1em", marginTop:1 }}>ATM</div>}
-                    </td>
-                    <td style={{ width:"42%", padding:"2px 3px 2px 6px", background:isITMPut?"rgba(6,78,59,0.09)":"transparent" }}>
-                      <ActionablePriceCell typeCEPE="PE" strike={row.strike} price={row.pe.ltp} chp={row.pe.chp} oi={row.pe.oi} oiRaw={row.pe.oiRaw || 0} maxOiRaw={maxOiRaw} vol={row.pe.vol} onAddLeg={addLeg} selectedLegs={selectedLegs} marketClosed={marketClosed}/>
-                    </td>
-                  </tr>
-                );
-              });})()}
+                  const isATM     = row.strike === atmStrike;
+                  const isITMCall = spotPrice && row.strike < spotPrice;
+                  const isITMPut  = spotPrice && row.strike > spotPrice;
+                  return (
+                    <tr key={i} ref={isATM ? atmRowRef : null} style={{
+                      borderBottom: isATM
+                        ? "1px solid rgba(96,165,250,0.35)"
+                        : "1px solid rgba(255,255,255,0.03)",
+                      background: isATM ? "rgba(30,58,138,0.15)" : "transparent",
+                    }}>
+                      {/* CE side */}
+                      <td style={{ width: "43%", padding: "2px 3px 2px 2px", background: isITMCall ? "rgba(120,20,20,0.07)" : "transparent" }}>
+                        <ActionablePriceCell
+                          typeCEPE="CE" strike={row.strike} price={row.ce.ltp} chp={row.ce.chp}
+                          oi={row.ce.oi} oiRaw={row.ce.oiRaw || 0} maxOiRaw={maxOiRaw} vol={row.ce.vol}
+                          onAddLeg={addLeg} selectedLegs={selectedLegs} />
+                      </td>
+                      {/* Strike */}
+                      <td style={{ width: 72, textAlign: "center", padding: "4px 2px" }}>
+                        <div style={{ fontFamily: C.mono, fontSize: isATM ? 13 : 11, fontWeight: isATM ? 900 : 500, color: isATM ? C.blue : C.textFaint, letterSpacing: isATM ? "-0.02em" : 0 }}>
+                          {row.strike}
+                        </div>
+                        {isATM && <div style={{ fontSize: 7.5, color: "#3b82f6", textTransform: "uppercase", letterSpacing: "0.12em", marginTop: 1 }}>ATM</div>}
+                      </td>
+                      {/* PE side */}
+                      <td style={{ width: "43%", padding: "2px 2px 2px 3px", background: isITMPut ? "rgba(5,60,40,0.08)" : "transparent" }}>
+                        <ActionablePriceCell
+                          typeCEPE="PE" strike={row.strike} price={row.pe.ltp} chp={row.pe.chp}
+                          oi={row.pe.oi} oiRaw={row.pe.oiRaw || 0} maxOiRaw={maxOiRaw} vol={row.pe.vol}
+                          onAddLeg={addLeg} selectedLegs={selectedLegs} />
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         )}
       </div>
 
-      {/* Basket */}
+      {/* ── Basket ── */}
       {selectedLegs.length > 0 && (
-        <div style={{ flexShrink:0, borderTop:"1px solid rgba(59,130,246,0.2)", background:"#08080b", padding:"10px 14px 12px" }}>
-          <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:10 }}>
+        <div style={{ flexShrink: 0, borderTop: "1px solid rgba(96,165,250,0.15)", background: C.bgHeader, padding: "10px 14px 14px", animation: "fadeIn 0.2s ease" }}>
+          {/* Leg chips */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
             {selectedLegs.map((leg, i) => (
               <div key={i} style={{
-                display:"flex", alignItems:"center", gap:5,
-                padding:"3px 8px 3px 10px", borderRadius:6, fontSize:10, fontWeight:700,
-                background:leg.type==="BUY"?"rgba(37,99,235,0.12)":"rgba(220,38,38,0.12)",
-                border:`1px solid ${leg.type==="BUY"?"rgba(59,130,246,0.3)":"rgba(239,68,68,0.3)"}`,
-                color:leg.type==="BUY"?"#93c5fd":"#fca5a5", fontFamily:C.mono,
+                display: "flex", alignItems: "center", gap: 5,
+                padding: "4px 8px 4px 10px", borderRadius: 8, fontSize: 10, fontWeight: 700, fontFamily: C.mono,
+                background: leg.type === "BUY" ? "rgba(29,78,216,0.1)" : "rgba(185,28,28,0.1)",
+                border: `1px solid ${leg.type === "BUY" ? "rgba(59,130,246,0.25)" : "rgba(239,68,68,0.25)"}`,
+                color: leg.type === "BUY" ? "#93c5fd" : "#fca5a5",
               }}>
-                <span style={{ fontSize:9, fontWeight:900 }}>{leg.type}</span>
-                <span style={{ color:C.textMuted }}>{leg.strike}{leg.optionType}</span>
-                <span style={{ color:C.textFaint }}>@{leg.price?.toFixed(2)}</span>
-                <span style={{ color:C.textFaint, fontSize:9 }}>×{leg.qty}</span> {/* ← fixed */}
-                <button onClick={()=>setSelectedLegs(selectedLegs.filter((_,j)=>j!==i))}
-                  style={{ marginLeft:2, background:"none", border:"none", color:C.textDead, cursor:"pointer", fontSize:14, lineHeight:1, padding:0 }}
-                  onMouseEnter={e=>e.currentTarget.style.color=C.red} onMouseLeave={e=>e.currentTarget.style.color=C.textDead}>×</button>
+                <span style={{ fontSize: 8.5, fontWeight: 900 }}>{leg.type}</span>
+                <span style={{ color: C.textMuted }}>{leg.strike}{leg.optionType}</span>
+                <span style={{ color: C.textFaint }}>@{leg.price?.toFixed(2)}</span>
+                <span style={{ color: C.textFaint, fontSize: 8.5 }}>×{leg.qty}</span>
+                <button onClick={() => setSelectedLegs(selectedLegs.filter((_, j) => j !== i))}
+                  style={{ marginLeft: 3, background: "none", border: "none", color: C.textDead, cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0, fontFamily: C.sans }}
+                  onMouseEnter={e => e.currentTarget.style.color = C.red}
+                  onMouseLeave={e => e.currentTarget.style.color = C.textDead}>×</button>
               </div>
             ))}
           </div>
 
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-            <div style={{ display:"flex", gap:20 }}>
+          {/* Summary row */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ display: "flex", gap: 24 }}>
               <div>
-                <span style={{ fontSize:9, color:C.textFaint, textTransform:"uppercase", letterSpacing:"0.08em" }}>Net Premium </span>
-                <span style={{ fontFamily:C.mono, fontSize:12, fontWeight:700, color:totalPremium>=0?C.green:C.red }}>
-                  {totalPremium>=0?"+":""}₹{totalPremium.toFixed(2)}
+                <span style={{ fontSize: 8.5, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.09em" }}>Net Premium </span>
+                <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: totalPremium >= 0 ? C.green : C.red }}>
+                  {totalPremium >= 0 ? "+" : ""}₹{totalPremium.toFixed(2)}
                 </span>
               </div>
               <div>
-                <span style={{ fontSize:9, color:C.textFaint, textTransform:"uppercase", letterSpacing:"0.08em" }}>Max P&L </span>
-                <span style={{ fontFamily:C.mono, fontSize:12, fontWeight:700, color:totalPnL>=0?C.green:C.red }}>
-                  {totalPnL>=0?"+":""}₹{totalPnL.toFixed(0)}
+                <span style={{ fontSize: 8.5, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.09em" }}>Max P&L </span>
+                <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: totalPnL >= 0 ? C.green : C.red }}>
+                  {totalPnL >= 0 ? "+" : ""}₹{totalPnL.toFixed(0)}
                 </span>
               </div>
             </div>
-            {/* ↓ fixed: was #374151 */}
-            <button onClick={()=>setSelectedLegs([])}
-              style={{ fontSize:9, color:C.textFaint, background:"none", border:"none", cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.08em" }}
-              onMouseEnter={e=>e.currentTarget.style.color=C.red} onMouseLeave={e=>e.currentTarget.style.color=C.textFaint}>
+            <button onClick={() => setSelectedLegs([])}
+              style={{ fontSize: 8.5, color: C.textFaint, background: "none", border: "none", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.09em", fontFamily: C.sans, transition: "color 0.1s" }}
+              onMouseEnter={e => e.currentTarget.style.color = C.red}
+              onMouseLeave={e => e.currentTarget.style.color = C.textFaint}>
               Clear All
             </button>
           </div>
 
-          <button onClick={handleExecute} disabled={isExecuting} style={{
-            width:"100%", background:isExecuting?"#1e3a5f":"linear-gradient(135deg,#1d4ed8 0%,#2563eb 100%)",
-            border:"none", borderRadius:10, color:"#fff", padding:"13px 0",
-            fontWeight:900, fontSize:12, letterSpacing:"0.12em", textTransform:"uppercase",
-            cursor:isExecuting?"not-allowed":"pointer", opacity:isExecuting?0.6:1,
-            display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-            boxShadow:isExecuting?"none":"0 0 22px rgba(37,99,235,0.35)", transition:"all 0.15s",
-          }}
-            onMouseEnter={e=>{if(!isExecuting)e.currentTarget.style.boxShadow="0 0 32px rgba(37,99,235,0.55)"}}
-            onMouseLeave={e=>{if(!isExecuting)e.currentTarget.style.boxShadow="0 0 22px rgba(37,99,235,0.35)"}}>
-            <Zap size={13}/>
-            {isExecuting ? "Executing..." : `Execute ${selectedLegs.length} Leg${selectedLegs.length>1?"s":""} · ${lots} Lot${lots>1?"s":""} · ${totalQty} Qty`}
+          {/* Execute button */}
+          <button onClick={handleExecute} disabled={isExecuting}
+            style={{
+              width: "100%",
+              background: isExecuting ? "#1e3a5f" : "linear-gradient(135deg, #1d4ed8 0%, #2563eb 60%, #3b82f6 100%)",
+              border: "none", borderRadius: 12, color: "#fff",
+              padding: "14px 0", fontWeight: 900, fontSize: 11.5,
+              letterSpacing: "0.12em", textTransform: "uppercase",
+              cursor: isExecuting ? "not-allowed" : "pointer",
+              opacity: isExecuting ? 0.6 : 1,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              boxShadow: isExecuting ? "none" : "0 0 28px rgba(37,99,235,0.4)",
+              transition: "all 0.15s", fontFamily: C.sans,
+            }}
+            onMouseEnter={e => { if (!isExecuting) e.currentTarget.style.boxShadow = "0 0 40px rgba(59,130,246,0.55)"; }}
+            onMouseLeave={e => { if (!isExecuting) e.currentTarget.style.boxShadow = "0 0 28px rgba(37,99,235,0.4)"; }}>
+            <Zap size={13} />
+            {isExecuting ? "Executing…" : `Execute ${selectedLegs.length} Leg${selectedLegs.length > 1 ? "s" : ""} · ${lots} Lot${lots > 1 ? "s" : ""} · ${totalQty} Qty`}
           </button>
         </div>
       )}

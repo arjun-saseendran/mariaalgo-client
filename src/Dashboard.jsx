@@ -5,812 +5,665 @@ import {
   Layers,
   TrendingUp,
   TrendingDown,
-  Wifi,
-  WifiOff,
   CheckCircle,
   AlertCircle,
   Clock,
+  Zap,
+  Radio,
+  BarChart2,
+  ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import io from "socket.io-client";
 import OptionChain from "./OptionChain";
 import logo from "./assets/logo.png";
 
-// ✅ FIX: was inverted — if VITE_API_URL set it used hardcoded localhost:3000 instead of the env value
-const SERVER_URL = import.meta.env.VITE_API_URL
+// Iron Condor server (port 3002) — condor positions, auto-condor, options, socket
+const IC_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL
   : "https://api.mariaalgo.online";
 
-const socket = io(SERVER_URL, {
-  withCredentials: true,
-});
+// Traffic Light server (port 3001) — traffic status, TL history
+const TL_URL = import.meta.env.VITE_TRAFFIC_URL
+  ? import.meta.env.VITE_TRAFFIC_URL
+  : "https://api.mariaalgo.online/traffic";
+
+const socket = io(IC_URL, { withCredentials: true });
 
 const LOG_STYLE = {
   success: "text-emerald-400",
-  error: "text-red-400",
-  warn: "text-yellow-400",
-  info: "text-gray-400",
+  error:   "text-red-400",
+  warn:    "text-amber-400",
+  info:    "text-slate-400",
 };
 
 const STRATEGY_BADGE = {
-  TRAFFIC: { label: "TL", cls: "bg-emerald-500/20 text-emerald-400" },
-  CONDOR: { label: "IC", cls: "bg-yellow-500/20 text-yellow-400" },
+  TRAFFIC: { label: "TL",  cls: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20" },
+  CONDOR:  { label: "IC",  cls: "bg-amber-500/15 text-amber-400 border border-amber-500/20" },
 };
 
-// Stat card used inside Traffic Light panel
-const Stat = ({ label, value, valueClass = "text-white", sub }) => (
-  <div className="bg-gray-900/60 rounded-xl p-3">
-    <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1">
-      {label}
-    </div>
-    <div className={`font-black text-xl font-mono ${valueClass}`}>{value}</div>
-    {sub && <div className="text-[9px] text-gray-400 mt-1">{sub}</div>}
-  </div>
+/* ── Tiny reusable components ─────────────────────────────────────────────── */
+
+const Pip = ({ active, color = "emerald" }) => (
+  <span className={`inline-block w-1.5 h-1.5 rounded-full ${active ? `bg-${color}-500 animate-pulse` : "bg-slate-700"}`} />
 );
 
-// PnL source pill shown in history table
-const PnlSourcePill = ({ source }) => {
-  if (!source) return null;
-  const isActual = source === "FYERS_ACTUAL";
+const Tag = ({ children, variant = "neutral" }) => {
+  const variants = {
+    neutral:  "bg-slate-800 text-slate-400 border-slate-700",
+    success:  "bg-emerald-500/10 text-emerald-400 border-emerald-500/25",
+    danger:   "bg-red-500/10 text-red-400 border-red-500/25",
+    warning:  "bg-amber-500/10 text-amber-400 border-amber-500/25",
+    info:     "bg-blue-500/10 text-blue-400 border-blue-500/25",
+  };
   return (
-    <span
-      className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wide ${
-        isActual
-          ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/20"
-          : "bg-orange-500/15 text-orange-400 border border-orange-500/20"
-      }`}
-    >
-      {isActual ? "✓ Actual" : "~ Est."}
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[9px] font-black uppercase tracking-widest ${variants[variant]}`}>
+      {children}
     </span>
   );
 };
 
-// Server connection status dot in header
-const ConnectionStatus = ({ connected }) => (
-  <div className="flex items-center gap-1.5">
-    {connected ? (
-      <>
-        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-        <span className="text-[9px] text-emerald-500 uppercase tracking-widest font-bold">
-          Live
-        </span>
-      </>
-    ) : (
-      <>
-        <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-        <span className="text-[9px] text-red-500 uppercase tracking-widest font-bold">
-          Disconnected
-        </span>
-      </>
-    )}
+const StatCard = ({ label, value, valueClass = "text-white", sub, accent }) => (
+  <div className={`relative rounded-xl p-3.5 bg-[#0d0d10] border ${accent ? "border-" + accent + "-500/20" : "border-slate-800/60"} overflow-hidden group transition-all hover:border-slate-700`}>
+    {accent && <div className={`absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-${accent}-500/40 to-transparent`} />}
+    <div className="text-[9px] text-slate-500 uppercase tracking-[0.12em] mb-1.5 font-semibold">{label}</div>
+    <div className={`font-black text-lg font-mono leading-none ${valueClass}`}>{value}</div>
+    {sub && <div className="text-[9px] text-slate-600 mt-1.5 leading-relaxed">{sub}</div>}
   </div>
 );
 
+const SectionHeader = ({ icon: Icon, title, iconColor = "text-slate-400", right }) => (
+  <div className="flex items-center gap-2.5 px-5 py-3 border-b border-slate-800/60">
+    <Icon size={12} className={iconColor} />
+    <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">{title}</span>
+    {right && <div className="ml-auto flex items-center gap-2">{right}</div>}
+  </div>
+);
+
+const PnlSourcePill = ({ source }) => {
+  if (!source) return null;
+  return source === "FYERS_ACTUAL"
+    ? <Tag variant="success">✓ Actual</Tag>
+    : <Tag variant="warning">~ Est.</Tag>;
+};
+
+/* ── Feed status indicator ────────────────────────────────────────────────── */
+const FeedDot = ({ status }) => {
+  const cfg = {
+    ok:         { dot: "bg-emerald-500",  text: "text-emerald-500", label: "Live" },
+    error:      { dot: "bg-red-500",      text: "text-red-500",     label: "Down" },
+    connecting: { dot: "bg-amber-500",    text: "text-amber-500",   label: "…" },
+  }[status] || { dot: "bg-slate-600", text: "text-slate-500", label: "—" };
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${cfg.dot}`} />
+      <span className={`text-[9px] font-black uppercase tracking-widest ${cfg.text}`}>{cfg.label}</span>
+    </div>
+  );
+};
+
+/* ── Main Dashboard ───────────────────────────────────────────────────────── */
 const Dashboard = () => {
   const [showOptionChain, setShowOptionChain] = useState(false);
-  const [condorData, setCondorData] = useState([]);
-  const [trafficData, setTrafficData] = useState({
-    signal: "WAITING",
-    livePnL: "0.00",
-    direction: null,
-    entryPrice: 0,
-    stopLoss: "0.00",
-    trailingActive: false,
-    breakoutHigh: 0,
-    breakoutLow: 0,
-    exitReason: null, // ✅ FIX: server now returns exitReason; missing from init caused undefined reads
+  const [condorData,      setCondorData]      = useState([]);
+  const [trafficData,     setTrafficData]     = useState({
+    signal: "WAITING", livePnL: "0.00", direction: null, entryPrice: 0,
+    stopLoss: "0.00", trailingActive: false, breakoutHigh: 0, breakoutLow: 0, exitReason: null,
   });
-  const [history, setHistory] = useState([]);
-  const [logs, setLogs] = useState([]);
-  const [logFilter, setLogFilter] = useState("ALL");
-  const [connected, setConnected] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState(null);
-  const [upstoxStatus, setUpstoxStatus] = useState("connecting"); // "ok" | "error" | "connecting"
-  const [upstoxError, setUpstoxError] = useState(null);
-  const [autoMode,     setAutoMode]     = useState(false);   // full-auto active
-  const [autoStatus,   setAutoStatus]   = useState(null);    // {slHits, maxSlHits, ...}
-  const [autoToggling, setAutoToggling] = useState(false);   // button loading state
+  const [history,       setHistory]       = useState([]);
+  const [logs,          setLogs]          = useState([]);
+  const [logFilter,     setLogFilter]     = useState("ALL");
+  const [connected,     setConnected]     = useState(false);
+  const [lastUpdate,    setLastUpdate]    = useState(null);
+  const [upstoxStatus,  setUpstoxStatus]  = useState("connecting");
+  const [upstoxError,   setUpstoxError]   = useState(null);
+  const [autoMode,      setAutoMode]      = useState(false);
+  const [autoStatus,    setAutoStatus]    = useState(null);
+  const [autoToggling,  setAutoToggling]  = useState(false);
   const logsEndRef = useRef(null);
 
-  // ── Data Polling ──────────────────────────────────────────────────────────
+  /* ── Data polling ──────────────────────────────────────────────────────── */
   useEffect(() => {
     const fetchAll = async () => {
       try {
         const [tRes, cRes, hRes, aRes] = await Promise.all([
-          fetch(`${SERVER_URL}/api/traffic/status`),
-          fetch(`${SERVER_URL}/api/condor/positions`),
-          fetch(`${SERVER_URL}/api/history`),
-          fetch(`${SERVER_URL}/api/auto-condor/status`),
+          fetch(`${TL_URL}/api/traffic/status`),        // Traffic Light server
+          fetch(`${IC_URL}/api/condor/positions`),      // Iron Condor server
+          fetch(`${IC_URL}/api/history`),               // Iron Condor server
+          fetch(`${IC_URL}/api/auto-condor/status`),    // Iron Condor server
         ]);
         if (tRes.ok) setTrafficData(await tRes.json());
         if (cRes.ok) {
           const cData = await cRes.json();
           setCondorData(cData);
-          // Upstox WS feed health — only flag error if market is open AND all prices are 0
           const marketHours = (() => {
-            const now = new Date(
-              new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }),
-            );
-            const day = now.getDay();
+            const now  = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
             const mins = now.getHours() * 60 + now.getMinutes();
-            return (
-              day >= 1 && day <= 5 && mins >= 9 * 60 + 15 && mins < 15 * 60 + 30
-            );
+            return now.getDay() >= 1 && now.getDay() <= 5 && mins >= 555 && mins < 930;
           })();
-          if (
-            marketHours &&
-            cData.length > 0 &&
-            cData[0].status !== "COMPLETED"
-          ) {
-            const allZero = ["call", "put"].every(
-              (s) => parseFloat(cData[0]?.[s]?.current) === 0,
-            );
-            if (allZero) {
-              setUpstoxStatus("error");
-              setUpstoxError(
-                "Live prices unavailable — Upstox WS feed disconnected",
-              );
-            } else {
-              setUpstoxStatus("ok");
-              setUpstoxError(null);
-            }
-          } else {
-            // Outside market hours or no active trade — feed is fine
-            setUpstoxStatus("ok");
-            setUpstoxError(null);
-          }
+          if (marketHours && cData.length > 0 && cData[0].status !== "COMPLETED") {
+            const allZero = ["call","put"].every(s => parseFloat(cData[0]?.[s]?.current) === 0);
+            setUpstoxStatus(allZero ? "error" : "ok");
+            setUpstoxError(allZero ? "Live prices unavailable — Upstox WS feed disconnected" : null);
+          } else { setUpstoxStatus("ok"); setUpstoxError(null); }
         }
         if (hRes.ok) setHistory(await hRes.json());
-        if (aRes.ok) {
-          const aData = await aRes.json();
-          setAutoMode(aData.active);
-          setAutoStatus(aData);
-        }
+        if (aRes.ok) { const d = await aRes.json(); setAutoMode(d.active); setAutoStatus(d); }
         setLastUpdate(new Date());
-      } catch (err) {
-        console.error("❌ Fetch Error:", err);
-      }
+      } catch {}
     };
     fetchAll();
     const iv = setInterval(fetchAll, 5000);
     return () => clearInterval(iv);
   }, []);
 
-  // ── Socket ────────────────────────────────────────────────────────────────
+  /* ── Socket ────────────────────────────────────────────────────────────── */
   useEffect(() => {
-    socket.on("connect", () => setConnected(true));
+    socket.on("connect",    () => setConnected(true));
     socket.on("disconnect", () => setConnected(false));
-
-    // Upstox WS health events emitted by upstoxLiveData.js
-    socket.on("upstox_status", ({ status, message }) => {
-      setUpstoxStatus(status); // "ok" | "error" | "connecting"
-      setUpstoxError(status === "error" ? message : null);
-    });
-
-    socket.on("auto_condor_tick", (data) => {
-      setAutoStatus(data);
-    });
-
-    socket.on("market_tick", (data) => {
-      // Only use spot-based estimate when no option LTP is available yet
-      setTrafficData((prev) => {
-        if (
-          prev.signal !== "ACTIVE" ||
-          !prev.direction ||
-          !prev.entryPrice ||
-          prev._optionLtpReceived
-        )
-          return prev;
-
-        const pts =
-          prev.direction === "CE"
-            ? data.price - prev.entryPrice
-            : prev.entryPrice - data.price;
+    socket.on("upstox_status", ({ status, message }) => { setUpstoxStatus(status); setUpstoxError(status === "error" ? message : null); });
+    socket.on("auto_condor_tick", d => setAutoStatus(d));
+    socket.on("market_tick", data => {
+      setTrafficData(prev => {
+        if (prev.signal !== "ACTIVE" || !prev.direction || !prev.entryPrice || prev._optionLtpReceived) return prev;
+        const pts = prev.direction === "CE" ? data.price - prev.entryPrice : prev.entryPrice - data.price;
         return { ...prev, livePnL: (pts * 65).toFixed(2), pnlSource: "spot" };
       });
     });
-
-    // Real option premium P&L — emitted by fyersLiveData when option symbol ticks
-    socket.on("option_tick", (data) => {
-      setTrafficData((prev) => {
+    socket.on("option_tick", data => {
+      setTrafficData(prev => {
         if (prev.signal !== "ACTIVE") return prev;
-        return {
-          ...prev,
-          livePnL: data.pnl,
-          optionLtp: data.ltp,
-          pnlSource: "option",
-          _optionLtpReceived: true,
-        };
+        return { ...prev, livePnL: data.pnl, optionLtp: data.ltp, pnlSource: "option", _optionLtpReceived: true };
       });
     });
-
-    socket.on("trade_log", (entry) => {
-      setLogs((prev) => [...prev, entry].slice(-200));
-    });
-
-    return () => {
-      socket.off("connect");
-      socket.off("disconnect");
-      socket.off("upstox_status");
-      socket.off("auto_condor_tick");
-      socket.off("market_tick");
-      socket.off("option_tick");
-      socket.off("trade_log");
-    };
+    socket.on("trade_log", entry => setLogs(prev => [...prev, entry].slice(-200)));
+    return () => { ["connect","disconnect","upstox_status","auto_condor_tick","market_tick","option_tick","trade_log"].forEach(e => socket.off(e)); };
   }, []);
 
-  useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logs]);
+  useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [logs]);
 
-  if (showOptionChain)
-    return <OptionChain onClose={() => setShowOptionChain(false)} />;
+  if (showOptionChain) return <OptionChain onClose={() => setShowOptionChain(false)} />;
 
   const pnl = parseFloat(trafficData.livePnL);
-  const filteredLogs =
-    logFilter === "ALL" ? logs : logs.filter((l) => l.strategy === logFilter);
+  const filteredLogs = logFilter === "ALL" ? logs : logs.filter(l => l.strategy === logFilter);
 
-  // Classify log lines that relate to order fill / PnL source so we can style them
   const classifyLog = (msg = "") => {
-    if (msg.includes("fully filled")) return "fill";
-    if (msg.includes("FYERS_ACTUAL")) return "actual";
-    if (msg.includes("ESTIMATED_SPOT")) return "estimate";
+    if (msg.includes("fully filled"))      return "fill";
+    if (msg.includes("FYERS_ACTUAL"))      return "actual";
+    if (msg.includes("ESTIMATED_SPOT"))    return "estimate";
     if (msg.includes("fill not confirmed")) return "warn";
-    if (
-      msg.includes("Unhandled Rejection") ||
-      msg.includes("Uncaught Exception")
-    )
-      return "crash";
+    if (msg.includes("Unhandled Rejection") || msg.includes("Uncaught Exception")) return "crash";
     return null;
   };
 
-  // ── Auto Mode Toggle ────────────────────────────────────────
   const toggleAutoMode = async () => {
     setAutoToggling(true);
     try {
-      const endpoint = autoMode ? "deactivate" : "activate";
-      const res = await fetch(`${SERVER_URL}/api/auto-condor/${endpoint}`, { method: "POST" });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.ok !== false) setAutoMode(!autoMode);
-      }
-    } catch (err) {
-      console.error("Auto mode toggle failed:", err);
-    } finally {
-      setAutoToggling(false);
-    }
+      const res = await fetch(`${IC_URL}/api/auto-condor/${autoMode ? "deactivate" : "activate"}`, { method: "POST" });
+      if (res.ok) { const d = await res.json(); if (d.ok !== false) setAutoMode(!autoMode); }
+    } catch {}
+    finally { setAutoToggling(false); }
   };
 
+  /* ── Condor row values ──────────────────────────────────────────────────── */
+  const row = condorData[0];
+  const condorPnlVal  = row ? parseFloat(row.totalPnL) : 0;
+  const condorPnlPos  = condorPnlVal >= 0;
+
   return (
-    <div className="min-h-screen bg-[#060608] text-gray-100 font-sans">
-      {/* ── Header ── */}
-      <div className="flex justify-between items-center px-6 py-4 border-b border-gray-800/60">
+    <div className="min-h-screen bg-[#07070a] text-slate-100" style={{ fontFamily: "'IBM Plex Mono', 'Fira Code', monospace" }}>
+
+      {/* ── Scanline overlay ── */}
+      <div className="pointer-events-none fixed inset-0 z-0 opacity-[0.015]"
+        style={{ backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.8) 2px, rgba(255,255,255,0.8) 3px)" }} />
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <header className="relative z-10 flex items-center justify-between px-6 py-3.5 border-b border-slate-800/80 bg-[#08080c]/80 backdrop-blur-sm">
         <div className="flex items-center gap-3">
-          <img
-            src={logo}
-            alt="Logo"
-            className="w-9 h-9 bg-emerald-500 rounded-lg p-1"
-          />
-          <h1 className="text-xl font-black uppercase tracking-wider">
-            Maria <span className="text-emerald-500">Algo</span>
-          </h1>
-          <ConnectionStatus connected={connected} />
+          <div className="relative">
+            <img src={logo} alt="Logo" className="w-8 h-8 rounded-lg" />
+            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#08080c] ${connected ? "bg-emerald-500" : "bg-red-500"}`} />
+          </div>
+          <div>
+            <h1 className="text-sm font-black uppercase tracking-[0.2em] leading-none">
+              Maria<span className="text-emerald-500">Algo</span>
+            </h1>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className={`text-[8px] font-bold uppercase tracking-widest ${connected ? "text-emerald-600" : "text-red-600"}`}>
+                {connected ? "● Connected" : "○ Offline"}
+              </span>
+            </div>
+          </div>
         </div>
+
         <div className="flex items-center gap-3">
           {lastUpdate && (
-            <span className="text-[9px] text-gray-500 font-mono hidden sm:block">
-              updated{" "}
-              {lastUpdate.toLocaleTimeString("en-IN", {
-                timeZone: "Asia/Kolkata",
-              })}
+            <span className="hidden sm:block text-[9px] text-slate-600 font-mono">
+              {lastUpdate.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })}
             </span>
           )}
           <button
             onClick={() => setShowOptionChain(true)}
-            className="flex items-center gap-2 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 text-blue-400 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
+            className="flex items-center gap-2 bg-blue-600/8 hover:bg-blue-600/15 border border-blue-500/20 hover:border-blue-500/40 text-blue-400 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-[0.12em] transition-all"
           >
-            <Layers size={14} /> Option Chain
+            <Layers size={12} />
+            Chain
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="p-6 space-y-6">
-        {/* ── Upstox Feed Error Banner ── */}
+      <div className="relative z-10 p-5 space-y-4 max-w-screen-xl mx-auto">
+
+        {/* ── Feed alert ─────────────────────────────────────────────────── */}
         {upstoxStatus === "error" && (
-          <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
-            <AlertCircle size={14} className="text-red-400 shrink-0" />
+          <div className="flex items-center gap-3 bg-red-500/8 border border-red-500/25 rounded-xl px-4 py-3">
+            <AlertTriangle size={13} className="text-red-400 shrink-0" />
             <div className="flex-1 min-w-0">
-              <span className="text-red-400 text-xs font-black uppercase tracking-widest">
-                Upstox Feed Down
-              </span>
-              <p className="text-red-400/70 text-[10px] mt-0.5">
-                {upstoxError ||
-                  "Iron Condor live prices unavailable — reconnecting…"}
-              </p>
+              <span className="text-red-400 text-[10px] font-black uppercase tracking-widest">Upstox Feed Down</span>
+              <p className="text-red-500/60 text-[9px] mt-0.5">{upstoxError || "Iron Condor live prices unavailable — reconnecting…"}</p>
             </div>
-            <div className="text-[9px] text-red-500/60 font-mono shrink-0">
-              auto-reconnect active
-            </div>
+            <span className="text-[8px] text-red-600/50 font-mono shrink-0">auto-reconnect</span>
           </div>
         )}
         {upstoxStatus === "connecting" && connected && (
-          <div className="flex items-center gap-3 bg-yellow-500/8 border border-yellow-500/20 rounded-xl px-4 py-3">
-            <Clock size={14} className="text-yellow-500 shrink-0" />
-            <span className="text-yellow-500/80 text-xs font-bold">
-              Connecting to Upstox feed…
-            </span>
+          <div className="flex items-center gap-3 bg-amber-500/6 border border-amber-500/15 rounded-xl px-4 py-3">
+            <Clock size={12} className="text-amber-500 shrink-0" />
+            <span className="text-amber-500/80 text-[10px] font-bold">Connecting to Upstox feed…</span>
           </div>
         )}
 
-        {/* ── Iron Condor Table ── */}
-        <div className="bg-[#0a0a0c] border border-gray-800 rounded-2xl overflow-hidden shadow-2xl">
-          <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-800/60">
-            <Shield size={13} className="text-yellow-500" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">
-              Live Iron Condor
-            </span>
-            {/* Auto mode button + Upstox feed dot */}
-            <div className="ml-auto flex items-center gap-3">
-              {/* AUTO MODE BUTTON */}
-              <button
-                onClick={toggleAutoMode}
-                disabled={autoToggling}
-                title={autoMode ? "Deactivate Auto Mode" : "Activate Full Auto Mode"}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all ${
-                  autoMode
-                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20"
-                    : "bg-gray-800/60 border-gray-700 text-gray-500 hover:border-gray-500 hover:text-gray-300"
-                } ${autoToggling ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-              >
-                <div className={`w-1.5 h-1.5 rounded-full ${autoMode ? "bg-emerald-400 animate-pulse" : "bg-gray-600"}`} />
-                {autoToggling ? "..." : autoMode ? "Auto ON" : "Auto OFF"}
-                {autoMode && autoStatus?.slHitCount && (
-                  <span className="ml-1 text-yellow-400/80">
-                    {(autoStatus.slHitCount.NIFTY || autoStatus.slHitCount.SENSEX || 0)}/2 SL
-                  </span>
-                )}
-              </button>
+        {/* ── Iron Condor Panel ──────────────────────────────────────────── */}
+        <div className="bg-[#09090d] border border-slate-800/70 rounded-2xl overflow-hidden shadow-2xl">
+          <SectionHeader
+            icon={Shield}
+            title="Iron Condor"
+            iconColor="text-amber-500/80"
+            right={
+              <>
+                {/* Auto mode toggle */}
+                <button
+                  onClick={toggleAutoMode}
+                  disabled={autoToggling}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all ${
+                    autoMode
+                      ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/18"
+                      : "bg-slate-800/60 border-slate-700/60 text-slate-500 hover:border-slate-600 hover:text-slate-300"
+                  } ${autoToggling ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                >
+                  <Zap size={10} className={autoMode ? "text-emerald-400" : "text-slate-600"} />
+                  {autoToggling ? "…" : autoMode ? "Auto ON" : "Auto OFF"}
+                  {autoMode && autoStatus?.slHitCount && (
+                    <span className="ml-1 text-amber-400/80">
+                      {(autoStatus.slHitCount.NIFTY || autoStatus.slHitCount.SENSEX || 0)}/2
+                    </span>
+                  )}
+                </button>
+                <FeedDot status={upstoxStatus} />
+              </>
+            }
+          />
 
-            <div className="flex items-center gap-1.5">
-              <div
-                className={`w-1.5 h-1.5 rounded-full ${
-                  upstoxStatus === "ok"
-                    ? "bg-emerald-500 animate-pulse"
-                    : upstoxStatus === "error"
-                      ? "bg-red-500 animate-pulse"
-                      : "bg-yellow-500 animate-pulse"
-                }`}
-              />
-              <span
-                className={`text-[9px] uppercase tracking-widest font-bold ${
-                  upstoxStatus === "ok"
-                    ? "text-emerald-500"
-                    : upstoxStatus === "error"
-                      ? "text-red-500"
-                      : "text-yellow-500"
-                }`}
-              >
-                {upstoxStatus === "error"
-                  ? "Feed Down"
-                  : upstoxStatus === "ok"
-                    ? "Feed Live"
-                    : "Connecting"}
+          {condorData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-10">
+              <Shield size={18} className="text-slate-700" />
+              <span className="text-slate-600 text-[10px] uppercase tracking-[0.15em] font-black">Scanning for Setup</span>
+              <span className="text-slate-700 text-[9px]">No active position — strategy idle</span>
+            </div>
+
+          ) : condorData[0].status === "COMPLETED" ? (
+            <div className="flex items-center justify-between px-5 py-4">
+              <div className="flex items-center gap-3">
+                <Tag variant="neutral">Completed</Tag>
+                <span className="text-slate-400 text-xs font-mono">{condorData[0].index}</span>
+                <span className="text-slate-500 text-xs">{condorData[0].exitReason?.replace(/_/g, " ")}</span>
+              </div>
+              <span className={`font-black text-lg font-mono ${condorPnlPos ? "text-emerald-400" : "text-red-400"}`}>
+                ₹{condorData[0].totalPnL}
               </span>
             </div>
+
+          ) : (
+            <div className="p-4">
+              {condorData.map((row, i) => {
+                const rowPnl    = parseFloat(row.totalPnL);
+                const pnlPos    = rowPnl >= 0;
+                const callLive  = parseFloat(row.call.current);
+                const putLive   = parseFloat(row.put.current);
+                const callEntry = parseFloat(row.call.entry);
+                const putEntry  = parseFloat(row.put.entry);
+                const callPct   = callEntry > 0 ? (callLive / callEntry) * 100 : 0;
+                const putPct    = putEntry  > 0 ? (putLive  / putEntry)  * 100 : 0;
+
+                return (
+                  <div key={i} className="space-y-3">
+                    {/* Summary bar */}
+                    <div className="flex items-center justify-between bg-[#0d0d10] rounded-xl px-4 py-3 border border-slate-800/50">
+                      <div className="flex items-center gap-4">
+                        <div className="text-center">
+                          <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">Index</div>
+                          <div className="text-sm font-black text-slate-300 font-mono">{row.index}</div>
+                        </div>
+                        <div className="w-px h-8 bg-slate-800" />
+                        <div className="text-center">
+                          <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">Qty</div>
+                          <div className="text-sm font-black text-slate-300 font-mono">{row.quantity}</div>
+                        </div>
+                        <div className="w-px h-8 bg-slate-800" />
+                        <div className="text-center">
+                          <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">Booked</div>
+                          <div className="text-sm font-black text-emerald-500 font-mono">₹{row.bufferPremium}</div>
+                        </div>
+                        {row.spreadSLCount > 0 && (
+                          <>
+                            <div className="w-px h-8 bg-slate-800" />
+                            <div className="text-center">
+                              <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">SL Hits</div>
+                              <div className="text-sm font-black text-amber-400 font-mono">{row.spreadSLCount}</div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">Live P&L</div>
+                        <div className={`text-2xl font-black font-mono ${upstoxStatus === "error" ? "text-slate-700" : pnlPos ? "text-emerald-400" : "text-red-400"}`}>
+                          {upstoxStatus === "error" ? "—" : `₹${row.totalPnL}`}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Legs grid */}
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* CALL leg */}
+                      <div className="bg-[#0d0d10] border border-red-900/20 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <TrendingUp size={11} className="text-red-400" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-red-400">Call Spread</span>
+                          </div>
+                          <Tag variant="danger">SHORT</Tag>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          <div>
+                            <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-1">Entry</div>
+                            <div className="font-mono text-xs font-bold text-slate-300">₹{row.call.entry}</div>
+                          </div>
+                          <div>
+                            <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-1">Live</div>
+                            <div className={`font-mono text-xs font-bold ${upstoxStatus === "error" ? "text-slate-700" : ""}`}>
+                              {upstoxStatus === "error" ? "—" : `₹${row.call.current}`}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-1">SL</div>
+                            <div className="font-mono text-xs font-bold text-red-400">₹{row.call.sl}</div>
+                          </div>
+                        </div>
+                        {/* Decay progress bar */}
+                        <div>
+                          <div className="flex justify-between text-[8px] text-slate-600 mb-1">
+                            <span>Decay</span>
+                            <span className="text-emerald-600">FF ₹{row.call.firefightLevel}</span>
+                          </div>
+                          <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-700"
+                              style={{
+                                width: `${Math.min(100, Math.max(0, 100 - callPct))}%`,
+                                background: callPct < 40 ? "#34d399" : callPct < 70 ? "#fbbf24" : "#f87171"
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* PUT leg */}
+                      <div className="bg-[#0d0d10] border border-emerald-900/20 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <TrendingDown size={11} className="text-emerald-400" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400">Put Spread</span>
+                          </div>
+                          <Tag variant="success">SHORT</Tag>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          <div>
+                            <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-1">Entry</div>
+                            <div className="font-mono text-xs font-bold text-slate-300">₹{row.put.entry}</div>
+                          </div>
+                          <div>
+                            <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-1">Live</div>
+                            <div className={`font-mono text-xs font-bold ${upstoxStatus === "error" ? "text-slate-700" : ""}`}>
+                              {upstoxStatus === "error" ? "—" : `₹${row.put.current}`}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-1">SL</div>
+                            <div className="font-mono text-xs font-bold text-red-400">₹{row.put.sl}</div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-[8px] text-slate-600 mb-1">
+                            <span>Decay</span>
+                            <span className="text-emerald-600">FF ₹{row.put.firefightLevel}</span>
+                          </div>
+                          <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-700"
+                              style={{
+                                width: `${Math.min(100, Math.max(0, 100 - putPct))}%`,
+                                background: putPct < 40 ? "#34d399" : putPct < 70 ? "#fbbf24" : "#f87171"
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Butterfly SL badge */}
+                    {row.isButterfly && (
+                      <div className="flex items-center gap-2 bg-purple-500/8 border border-purple-500/20 rounded-lg px-3 py-2">
+                        <Activity size={11} className="text-purple-400" />
+                        <span className="text-[9px] font-black text-purple-400 uppercase tracking-widest">Iron Butterfly</span>
+                        <span className="text-[9px] text-slate-500 ml-auto">SL ₹{row.butterflySL}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          </div>
-          <table className="w-full text-left">
-            <thead>
-              <tr className="text-[9px] uppercase text-gray-400 border-b border-gray-800">
-                <th className="py-2 px-5 text-center">Side</th>
-                <th className="py-2 text-center">Entry</th>
-                <th className="py-2 text-center">Live</th>
-                {/* ✅ FIX: was two columns "70% Exit" + "Firefight" pointing to profit70 and firefight
-                    fields — both are now the single firefightLevel field (entry × 0.30) from server */}
-                <th className="py-2 text-center">70% / FF Level</th>
-                <th className="py-2 text-center">Stop Loss</th>
-                <th className="py-2 text-center">Qty</th>
-                <th className="py-2 pr-5 text-right">PnL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {condorData.length === 0 ? (
-                <tr>
-                  <td colSpan={8}>
-                    <div className="flex flex-col items-center justify-center gap-2 py-7">
-                      <div className="flex items-center gap-2">
-                        <Shield size={14} className="text-yellow-600/50" />
-                        <span className="text-yellow-600/60 text-xs font-black uppercase tracking-widest">
-                          Scanning for Setup
-                        </span>
-                      </div>
-                      <div className="text-gray-500 text-[10px]">
-                        No iron condor position active — strategy is idle
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              ) : condorData[0].status === "COMPLETED" ? (
-                <tr>
-                  <td colSpan={8} className="py-6 px-5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-gray-700/40 text-gray-500 uppercase">
-                          Completed
-                        </span>
-                        <span className="text-gray-400 text-xs font-mono">
-                          {condorData[0].index}
-                        </span>
-                        <span className="text-gray-400 text-xs">
-                          {condorData[0].exitReason?.replace(/_/g, " ")}
-                        </span>
-                      </div>
-                      <span
-                        className={`font-black text-lg font-mono ${parseFloat(condorData[0].totalPnL) >= 0 ? "text-emerald-400" : "text-red-400"}`}
-                      >
-                        ₹{condorData[0].totalPnL}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                condorData.map((row, i) => (
-                  <React.Fragment key={i}>
-                    <tr className="border-b border-gray-800/30">
-                      <td className="py-3 px-5 text-center text-red-400 text-[10px] font-black">
-                        CALL
-                      </td>
-                      <td className="text-center font-mono text-xs">
-                        ₹{row.call.entry}
-                      </td>
-                      <td
-                        className={`text-center font-mono text-xs ${upstoxStatus === "error" ? "text-red-500/50" : ""}`}
-                      >
-                        {upstoxStatus === "error" ? (
-                          <span title="Feed down">—</span>
-                        ) : (
-                          `₹${row.call.current}`
-                        )}
-                      </td>
-                      {/* ✅ FIX: was row.call.profit70 + row.call.firefight (two columns, both undefined).
-                          Server now returns firefightLevel (entry × 0.30). Merged into one column. */}
-                      <td className="text-center font-mono text-xs text-emerald-500">
-                        ₹{row.call.firefightLevel}
-                      </td>
-                      <td className="text-center font-mono text-xs text-red-400">
-                        ₹{row.call.sl}
-                      </td>
-                      <td className="text-center font-bold text-sm" rowSpan="2">
-                        {row.quantity}
-                      </td>
-                      <td
-                        className={`text-right pr-5 font-black text-base ${upstoxStatus === "error" ? "text-gray-600" : parseFloat(row.totalPnL) >= 0 ? "text-emerald-400" : "text-red-400"}`}
-                        rowSpan="2"
-                      >
-                        {upstoxStatus === "error" ? (
-                          <span className="text-[10px] text-red-500/50 font-normal">
-                            feed down
-                          </span>
-                        ) : (
-                          `₹${row.totalPnL}`
-                        )}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-3 px-5 text-center text-emerald-400 text-[10px] font-black">
-                        PUT
-                      </td>
-                      <td className="text-center font-mono text-xs">
-                        ₹{row.put.entry}
-                      </td>
-                      <td
-                        className={`text-center font-mono text-xs ${upstoxStatus === "error" ? "text-red-500/50" : ""}`}
-                      >
-                        {upstoxStatus === "error" ? (
-                          <span title="Feed down">—</span>
-                        ) : (
-                          `₹${row.put.current}`
-                        )}
-                      </td>
-                      {/* ✅ FIX: was row.put.profit70 + row.put.firefight — now firefightLevel */}
-                      <td className="text-center font-mono text-xs text-emerald-500">
-                        ₹{row.put.firefightLevel}
-                      </td>
-                      <td className="text-center font-mono text-xs text-red-400">
-                        ₹{row.put.sl}
-                      </td>
-                    </tr>
-                  </React.Fragment>
-                ))
-              )}
-            </tbody>
-          </table>
+          )}
         </div>
 
-        {/* ── Two Panel: Traffic Light + Live Logs ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* LEFT: Traffic Light */}
-          <div
-            className="bg-[#0a0a0c] border border-gray-800 rounded-2xl p-5 shadow-xl flex flex-col"
-            style={{ minHeight: "280px" }}
-          >
-            <div className="flex items-center gap-2 mb-4 border-b border-gray-800/60 pb-3">
-              <Activity size={13} className="text-emerald-500" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">
-                Traffic Light
-              </span>
-              <span
-                className={`ml-auto px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                  trafficData.signal === "ACTIVE"
-                    ? "bg-emerald-500/20 text-emerald-400"
-                    : trafficData.signal === "CLOSED"
-                      ? "bg-gray-700/40 text-gray-500"
-                      : "bg-yellow-500/10 text-yellow-500"
-                }`}
-              >
-                {trafficData.signal}
-              </span>
-            </div>
+        {/* ── Two-panel row ─────────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-            {trafficData.signal === "ACTIVE" ? (
-              <div className="grid grid-cols-2 gap-3 flex-1">
-                <Stat
-                  label="Direction"
-                  value={
-                    <span className="flex items-center gap-1">
-                      {trafficData.direction === "CE" ? (
-                        <TrendingUp size={16} />
-                      ) : (
-                        <TrendingDown size={16} />
-                      )}
-                      {trafficData.direction}
-                    </span>
-                  }
-                  valueClass={
-                    trafficData.direction === "CE"
-                      ? "text-emerald-400"
-                      : "text-red-400"
-                  }
-                />
-                <Stat label="Entry Spot" value={trafficData.entryPrice} />
-                <Stat
-                  label="Live P&L"
-                  value={`₹${trafficData.livePnL}`}
-                  valueClass={pnl >= 0 ? "text-emerald-400" : "text-red-400"}
-                  sub={
-                    trafficData.pnlSource === "option"
-                      ? `option LTP ₹${trafficData.optionLtp ?? "—"} · actual premium`
-                      : "spot estimate · awaiting option tick"
-                  }
-                />
-                <Stat
-                  label={
-                    trafficData.trailingActive ? "Trail SL 🔒" : "Stop Loss"
-                  }
-                  value={trafficData.stopLoss}
-                  valueClass={
-                    trafficData.trailingActive
-                      ? "text-emerald-400"
-                      : "text-red-400"
-                  }
-                />
-                {trafficData.breakoutHigh > 0 && (
-                  <>
-                    <Stat
-                      label="Breakout High"
-                      value={trafficData.breakoutHigh}
-                      valueClass="text-gray-300"
-                    />
-                    <Stat
-                      label="Breakout Low"
-                      value={trafficData.breakoutLow}
-                      valueClass="text-gray-300"
-                    />
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center gap-3 py-4">
-                <div
-                  className={`text-5xl font-black ${trafficData.signal === "CLOSED" ? "text-gray-500" : "text-yellow-500/40"}`}
-                >
+          {/* LEFT: Traffic Light */}
+          <div className="bg-[#09090d] border border-slate-800/70 rounded-2xl overflow-hidden shadow-xl">
+            <SectionHeader
+              icon={Radio}
+              title="Traffic Light"
+              iconColor="text-emerald-500/80"
+              right={
+                <Tag variant={
+                  trafficData.signal === "ACTIVE" ? "success" :
+                  trafficData.signal === "CLOSED" ? "neutral" : "warning"
+                }>
                   {trafficData.signal}
+                </Tag>
+              }
+            />
+
+            <div className="p-4">
+              {trafficData.signal === "ACTIVE" ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <StatCard
+                    label="Direction"
+                    accent={trafficData.direction === "CE" ? "emerald" : "red"}
+                    value={
+                      <span className="flex items-center gap-1.5">
+                        {trafficData.direction === "CE"
+                          ? <TrendingUp size={14} className="text-emerald-400" />
+                          : <TrendingDown size={14} className="text-red-400" />
+                        }
+                        {trafficData.direction}
+                      </span>
+                    }
+                    valueClass={trafficData.direction === "CE" ? "text-emerald-400" : "text-red-400"}
+                  />
+                  <StatCard label="Entry Spot" value={trafficData.entryPrice} valueClass="text-slate-200" />
+                  <StatCard
+                    label="Live P&L"
+                    accent={pnl >= 0 ? "emerald" : "red"}
+                    value={`₹${trafficData.livePnL}`}
+                    valueClass={pnl >= 0 ? "text-emerald-400" : "text-red-400"}
+                    sub={trafficData.pnlSource === "option"
+                      ? `option LTP ₹${trafficData.optionLtp ?? "—"} · actual`
+                      : "spot estimate · awaiting option tick"}
+                  />
+                  <StatCard
+                    label={trafficData.trailingActive ? "Trail SL 🔒" : "Stop Loss"}
+                    accent={trafficData.trailingActive ? "emerald" : "red"}
+                    value={trafficData.stopLoss}
+                    valueClass={trafficData.trailingActive ? "text-emerald-400" : "text-red-400"}
+                  />
+                  {trafficData.breakoutHigh > 0 && <>
+                    <StatCard label="Range High" value={trafficData.breakoutHigh} valueClass="text-slate-300" />
+                    <StatCard label="Range Low"  value={trafficData.breakoutLow}  valueClass="text-slate-300" />
+                  </>}
                 </div>
-                {trafficData.breakoutHigh > 0 && (
-                  <div className="grid grid-cols-2 gap-3 w-full mt-2">
-                    <Stat
-                      label="Breakout High"
-                      value={trafficData.breakoutHigh}
-                      valueClass="text-gray-300"
-                    />
-                    <Stat
-                      label="Breakout Low"
-                      value={trafficData.breakoutLow}
-                      valueClass="text-gray-300"
-                    />
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-4 py-6">
+                  <div className={`text-6xl font-black tracking-tighter ${
+                    trafficData.signal === "CLOSED" ? "text-slate-700" : "text-amber-500/30"
+                  }`}>
+                    {trafficData.signal}
                   </div>
-                )}
-                <div className="text-gray-400 text-xs">
-                  {trafficData.signal === "CLOSED"
-                    ? <>
-                        Trade completed for today
+                  {trafficData.breakoutHigh > 0 && (
+                    <div className="grid grid-cols-2 gap-3 w-full">
+                      <StatCard label="Range High" value={trafficData.breakoutHigh} valueClass="text-slate-300" />
+                      <StatCard label="Range Low"  value={trafficData.breakoutLow}  valueClass="text-slate-300" />
+                    </div>
+                  )}
+                  <p className="text-slate-600 text-[10px] text-center">
+                    {trafficData.signal === "CLOSED" ? (
+                      <>
+                        Trade completed
                         {trafficData.exitReason && (
-                          <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-black bg-gray-700/40 text-gray-400 uppercase tracking-wide">
-                            {trafficData.exitReason.replace(/_/g, " ")}
+                          <span className="ml-2">
+                            <Tag variant="neutral">{trafficData.exitReason.replace(/_/g, " ")}</Tag>
                           </span>
                         )}
                       </>
-                    : "Waiting for range lock..."}
+                    ) : "Waiting for range lock…"}
+                  </p>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* RIGHT: Live Logs */}
-          <div
-            className="bg-[#0a0a0c] border border-gray-800 rounded-2xl flex flex-col shadow-xl"
-            style={{ height: "340px" }}
-          >
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800/60 shrink-0">
-              <div
-                className={`w-2 h-2 rounded-full ${connected ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`}
-              />
-              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">
-                Live Logs
-              </span>
-              <div className="ml-auto flex items-center gap-1">
-                {["ALL", "TRAFFIC", "CONDOR"].map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setLogFilter(f)}
-                    className={`px-2 py-0.5 rounded text-[9px] font-bold transition-all ${
-                      logFilter === f
-                        ? f === "TRAFFIC"
-                          ? "bg-emerald-500/20 text-emerald-400"
-                          : f === "CONDOR"
-                            ? "bg-yellow-500/20 text-yellow-400"
-                            : "bg-gray-700 text-white"
-                        : "text-gray-500 hover:text-gray-300"
-                    }`}
-                  >
-                    {f}
-                  </button>
-                ))}
-                {logs.length > 0 && (
-                  <button
-                    onClick={() => setLogs([])}
-                    className="px-2 py-0.5 rounded text-[9px] text-gray-500 hover:text-red-400 ml-1 transition-all"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-3 py-2 font-mono text-[10px] space-y-1">
-              {filteredLogs.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-gray-500 text-xs">
-                  No logs yet...
+          <div className="bg-[#09090d] border border-slate-800/70 rounded-2xl overflow-hidden flex flex-col shadow-xl" style={{ height: 360 }}>
+            <SectionHeader
+              icon={BarChart2}
+              title="Live Logs"
+              iconColor={connected ? "text-emerald-500" : "text-red-500"}
+              right={
+                <div className="flex items-center gap-1">
+                  {["ALL","TRAFFIC","CONDOR"].map(f => (
+                    <button key={f} onClick={() => setLogFilter(f)}
+                      className={`px-2.5 py-1 rounded-md text-[8px] font-black transition-all uppercase tracking-widest ${
+                        logFilter === f
+                          ? f === "TRAFFIC" ? "bg-emerald-500/15 text-emerald-400"
+                          : f === "CONDOR"  ? "bg-amber-500/15 text-amber-400"
+                          : "bg-slate-700 text-white"
+                          : "text-slate-600 hover:text-slate-400"
+                      }`}
+                    >{f}</button>
+                  ))}
+                  {logs.length > 0 && (
+                    <button onClick={() => setLogs([])}
+                      className="px-2 py-1 rounded text-[8px] text-slate-600 hover:text-red-400 ml-1 transition-all">
+                      Clear
+                    </button>
+                  )}
                 </div>
-              ) : (
-                filteredLogs.map((log, i) => {
-                  const badge = STRATEGY_BADGE[log.strategy];
-                  const kind = classifyLog(log.msg);
-                  // Special row styles for key events
-                  const rowCls =
-                    kind === "fill"
-                      ? "bg-emerald-500/5 rounded px-1"
-                      : kind === "actual"
-                        ? "bg-emerald-500/5 rounded px-1"
-                        : kind === "estimate"
-                          ? "bg-orange-500/5 rounded px-1"
-                          : kind === "crash"
-                            ? "bg-red-500/10 rounded px-1 border-l-2 border-red-500/40"
-                            : "";
-                  return (
-                    <div
-                      key={i}
-                      className={`flex items-start gap-2 leading-relaxed ${rowCls}`}
-                    >
-                      <span className="text-gray-500 shrink-0">{log.time}</span>
-                      {badge && (
-                        <span
-                          className={`shrink-0 px-1 rounded text-[8px] font-black ${badge.cls}`}
-                        >
-                          {badge.label}
-                        </span>
-                      )}
-                      {/* Order fill confirmed icon */}
-                      {kind === "fill" && (
-                        <CheckCircle
-                          size={10}
-                          className="text-emerald-500 shrink-0 mt-0.5"
-                        />
-                      )}
-                      {kind === "crash" && (
-                        <AlertCircle
-                          size={10}
-                          className="text-red-400 shrink-0 mt-0.5"
-                        />
-                      )}
-                      <span className={LOG_STYLE[log.level] || "text-gray-400"}>
-                        {log.msg}
-                      </span>
-                    </div>
-                  );
-                })
-              )}
+              }
+            />
+
+            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1 font-mono text-[9.5px]">
+              {filteredLogs.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-slate-700 text-xs">No logs yet…</div>
+              ) : filteredLogs.map((log, i) => {
+                const badge = STRATEGY_BADGE[log.strategy];
+                const kind  = classifyLog(log.msg);
+                const rowCls = kind === "fill"     ? "bg-emerald-500/5 rounded px-1.5 border-l border-emerald-500/30"
+                             : kind === "actual"   ? "bg-emerald-500/4 rounded px-1.5"
+                             : kind === "estimate" ? "bg-amber-500/4 rounded px-1.5"
+                             : kind === "crash"    ? "bg-red-500/8 rounded px-1.5 border-l border-red-500/40"
+                             : "";
+                return (
+                  <div key={i} className={`flex items-start gap-2 leading-relaxed ${rowCls}`}>
+                    <span className="text-slate-700 shrink-0">{log.time}</span>
+                    {badge && <span className={`shrink-0 px-1.5 py-0.5 rounded text-[7px] font-black ${badge.cls}`}>{badge.label}</span>}
+                    {kind === "fill"  && <CheckCircle size={9} className="text-emerald-500 shrink-0 mt-0.5" />}
+                    {kind === "crash" && <AlertCircle size={9} className="text-red-400 shrink-0 mt-0.5" />}
+                    <span className={LOG_STYLE[log.level] || "text-slate-500"}>{log.msg}</span>
+                  </div>
+                );
+              })}
               <div ref={logsEndRef} />
             </div>
           </div>
         </div>
 
-        {/* ── Trade History ── */}
+        {/* ── Trade History ─────────────────────────────────────────────── */}
         {history.length > 0 && (
-          <div className="bg-[#0a0a0c] border border-gray-800 rounded-2xl overflow-hidden shadow-xl">
-            <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-800/60">
-              <TrendingUp size={13} className="text-blue-400" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">
-                Trade History
-              </span>
-              {/* Legend for PnL source */}
-              <div className="ml-auto flex items-center gap-2">
-                <span className="text-[8px] text-gray-500 uppercase tracking-wide">
-                  PnL source:
-                </span>
-                <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">
-                  ✓ Actual
-                </span>
-                <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-orange-500/15 text-orange-400 border border-orange-500/20">
-                  ~ Est.
-                </span>
-              </div>
-            </div>
+          <div className="bg-[#09090d] border border-slate-800/70 rounded-2xl overflow-hidden shadow-xl">
+            <SectionHeader
+              icon={TrendingUp}
+              title="Trade History"
+              iconColor="text-blue-400/70"
+              right={
+                <div className="flex items-center gap-2">
+                  <span className="text-[8px] text-slate-700 uppercase tracking-wider">PnL:</span>
+                  <Tag variant="success">✓ Actual</Tag>
+                  <Tag variant="warning">~ Est.</Tag>
+                </div>
+              }
+            />
             <table className="w-full text-left">
               <thead>
-                <tr className="text-[9px] uppercase text-gray-400 border-b border-gray-800">
-                  <th className="py-2 px-5">Strategy</th>
-                  <th className="py-2">Symbol</th>
-                  <th className="py-2">Exit Reason</th>
-                  <th className="py-2 text-center">PnL Source</th>
-                  <th className="py-2 pr-5 text-right">P&L</th>
+                <tr className="text-[8px] uppercase tracking-widest text-slate-700 border-b border-slate-800/60">
+                  <th className="py-2.5 px-5">Strategy</th>
+                  <th className="py-2.5">Symbol</th>
+                  <th className="py-2.5">Exit Reason</th>
+                  <th className="py-2.5 text-center">Source</th>
+                  <th className="py-2.5 pr-5 text-right">P&L</th>
                 </tr>
               </thead>
               <tbody>
                 {history.map((h, i) => {
-                  // Extract PnL source from notes field if present
-                  const sourceMatch = h.notes?.match(
-                    /PnL Source:\s*(FYERS_ACTUAL|ESTIMATED_SPOT)/,
-                  );
-                  const pnlSource = sourceMatch?.[1] || null;
+                  const srcMatch = h.notes?.match(/PnL Source:\s*(FYERS_ACTUAL|ESTIMATED_SPOT)/);
+                  const pnlSrc   = srcMatch?.[1] || null;
+                  const hPnl     = parseFloat(h.pnl);
                   return (
-                    <tr
-                      key={i}
-                      className="border-b border-gray-800/30 hover:bg-gray-900/20 transition-colors"
-                    >
+                    <tr key={i} className="border-b border-slate-800/30 hover:bg-slate-900/20 transition-colors group">
                       <td className="py-3 px-5">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[9px] font-black ${
-                            h.strategy === "IRON_CONDOR"
-                              ? "bg-yellow-500/20 text-yellow-400"
-                              : "bg-emerald-500/20 text-emerald-400"
-                          }`}
-                        >
+                        <Tag variant={h.strategy === "IRON_CONDOR" ? "warning" : "success"}>
                           {h.strategy === "IRON_CONDOR" ? "IC" : "TL"}
-                        </span>
+                        </Tag>
                       </td>
-                      <td className="font-mono text-xs text-gray-300">
+                      <td className="font-mono text-[10px] text-slate-400 group-hover:text-slate-300 transition-colors">
                         {h.symbol}
                       </td>
-                      <td className="text-xs text-gray-400">
+                      <td className="text-[10px] text-slate-600">
                         {h.exitReason?.replace(/_/g, " ")}
                       </td>
                       <td className="text-center">
-                        <PnlSourcePill source={pnlSource} />
+                        <PnlSourcePill source={pnlSrc} />
                       </td>
-                      <td
-                        className={`pr-5 text-right font-black text-sm ${parseFloat(h.pnl) >= 0 ? "text-emerald-400" : "text-red-400"}`}
-                      >
-                        ₹{parseFloat(h.pnl).toFixed(2)}
+                      <td className={`pr-5 text-right font-black text-sm font-mono ${hPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {hPnl >= 0 ? "+" : ""}₹{hPnl.toFixed(2)}
                       </td>
                     </tr>
                   );
