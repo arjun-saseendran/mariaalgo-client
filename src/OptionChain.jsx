@@ -18,18 +18,19 @@ const C = {
 };
 
 // ─── ActionablePriceCell ──────────────────────────────────────────────────────
-const ActionablePriceCell = ({ typeCEPE, strike, price, chp, oi, oiRaw, maxOiRaw, vol, onAddLeg, selectedLegs }) => {
+const ActionablePriceCell = ({ typeCEPE, strike, price, chp, oi, oiRaw, maxOiRaw, vol, onAddLeg, selectedLegs, marketClosed }) => {
   const isBuySelected  = selectedLegs.some(l => l.strike === strike && l.optionType === typeCEPE && l.type === "BUY");
   const isSellSelected = selectedLegs.some(l => l.strike === strike && l.optionType === typeCEPE && l.type === "SELL");
   const chpColor = chp > 0 ? C.green : chp < 0 ? C.red : C.textFaint;
   const hasPrice = price > 0;
+  const hasOI    = oiRaw > 0;
   const oiBarPct   = maxOiRaw > 0 ? Math.min(100, (oiRaw / maxOiRaw) * 100) : 0;
   const oiBarColor = typeCEPE === "CE" ? "rgba(248,113,113,0.5)" : "rgba(52,211,153,0.5)";
 
   return (
     <div style={{ display: "flex", alignItems: "stretch", height: "100%", minHeight: 48 }}>
 
-      {/* BUY — full height, 52px wide, flush to LTP */}
+      {/* BUY */}
       <button
         onClick={() => onAddLeg("BUY", strike, typeCEPE, price)}
         style={{
@@ -55,18 +56,27 @@ const ActionablePriceCell = ({ typeCEPE, strike, price, chp, oi, oiRaw, maxOiRaw
         borderTop: "1px solid rgba(255,255,255,0.05)",
         borderBottom: "1px solid rgba(255,255,255,0.05)",
       }}>
+        {/* LTP */}
         <span style={{ fontFamily: C.mono, fontWeight: 700, fontSize: 12.5, letterSpacing: "-0.02em", lineHeight: 1.2,
-          color: hasPrice ? C.text : C.textFaint }}>  {/* ← was #374151 for "—" */}
+          color: hasPrice ? C.text : C.textDead }}>
           {hasPrice ? price.toFixed(2) : "—"}
         </span>
+
+        {/* % change */}
         {chp !== 0 && (
           <span style={{ fontSize: 9.5, color: chpColor, fontWeight: 700, lineHeight: 1.2, marginTop: 1 }}>
             {chp > 0 ? "+" : ""}{chp?.toFixed(1)}%
           </span>
         )}
-        <span style={{ fontSize: 8.5, color: C.textMuted, lineHeight: 1.2, marginTop: 1 }}>  {/* ← was #374151 */}
-          {oi} · {vol}
-        </span>
+
+        {/* OI · Vol */}
+        {(hasOI || hasPrice) && (
+          <span style={{ fontSize: 8.5, color: C.textMuted, lineHeight: 1.2, marginTop: 1 }}>
+            {oi} · {vol}
+          </span>
+        )}
+
+        {/* OI bar */}
         {oiBarPct > 0 && (
           <div style={{ width: "80%", height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginTop: 3, overflow: "hidden" }}>
             <div style={{ width: oiBarPct + "%", height: "100%", background: oiBarColor, borderRadius: 2, transition: "width 0.4s ease" }} />
@@ -74,7 +84,7 @@ const ActionablePriceCell = ({ typeCEPE, strike, price, chp, oi, oiRaw, maxOiRaw
         )}
       </div>
 
-      {/* SELL — full height, 52px wide, flush to LTP */}
+      {/* SELL */}
       <button
         onClick={() => onAddLeg("SELL", strike, typeCEPE, price)}
         style={{
@@ -106,6 +116,9 @@ const OptionChain = ({ onClose }) => {
   const [isExecuting,  setIsExecuting]  = useState(false);
   const [loading,      setLoading]      = useState(true);
   const [lastUpdated,  setLastUpdated]  = useState(null);
+  const [marketClosed, setMarketClosed] = useState(false);
+  const [fetchError,   setFetchError]   = useState(null);
+  const [dataSource,   setDataSource]   = useState(null); // 'UPSTOX_LIVE' | 'UPSTOX_LAST_SESSION'
   const atmRowRef = useRef(null);
 
   const lotSize  = LOT_SIZE[symbol] || 65;
@@ -113,20 +126,39 @@ const OptionChain = ({ onClose }) => {
 
   const fetchChain = async () => {
     try {
-      const res  = await fetch(`https://api.mariaalgo.online/api/options/chain?symbol=${symbol}&strikes=${STRIKE_RANGE}`);
+      const res = await fetch(`https://api.mariaalgo.online/api/options/chain?symbol=${symbol}&strikes=${STRIKE_RANGE}`);
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        setFetchError(errBody.error || `Server error ${res.status}`);
+        setMarketClosed(false);
+        return;
+      }
       const data = await res.json();
+      if (data.error) { setFetchError(data.error); return; }
       if (data.chain) {
         setChainData(data.chain);
         setSpotPrice(data.spotPrice);
         setAtmStrike(data.atmStrike);
         setExpiry(data.expiry || "");
+        setMarketClosed(!!data.marketClosed);
+        setDataSource(data.dataSource || null);
+        setFetchError(null);
+        // Always update timestamp — last-session data has a meaningful fetch time too
         setLastUpdated(new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }));
       }
-    } catch (err) { console.error("Option chain fetch failed:", err); }
-    finally { setLoading(false); }
+    } catch (err) {
+      console.error("Option chain fetch failed:", err);
+      setFetchError("Failed to reach server");
+    } finally { setLoading(false); }
   };
 
-  useEffect(() => { setLoading(true); setChainData([]); setLots(1); fetchChain(); const itv = setInterval(fetchChain, 5000); return () => clearInterval(itv); }, [symbol]);
+  useEffect(() => {
+    setLoading(true); setChainData([]); setLots(1); fetchChain();
+    // Poll fast when live, slow when closed (last-session data doesn't change)
+    const interval = marketClosed ? 60000 : 5000;
+    const itv = setInterval(fetchChain, interval);
+    return () => clearInterval(itv);
+  }, [symbol, marketClosed]);
   useEffect(() => { if (atmRowRef.current) setTimeout(() => atmRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 150); }, [atmStrike]);
   useEffect(() => { if (selectedLegs.length > 0) setSelectedLegs(prev => prev.map(l => ({ ...l, lots, qty: lots * lotSize }))); }, [lots]);
 
@@ -170,13 +202,17 @@ const OptionChain = ({ onClose }) => {
 
         <div style={{ textAlign:"center" }}>
           {spotPrice && (
-            <div style={{ fontFamily:C.mono, fontWeight:700, fontSize:17, letterSpacing:"-0.02em" }}>
-              <span style={{ color:C.textMuted, marginRight:6 }}>{symbol}</span>
-              <span style={{ color:C.green }}>₹{spotPrice?.toLocaleString("en-IN")}</span>
+            <div style={{ fontFamily:C.mono, fontWeight:700, fontSize:17, letterSpacing:"-0.02em", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+              <span style={{ color:C.textMuted }}>{symbol}</span>
+              <span style={{ color: marketClosed ? "#fbbf24" : C.green }}>₹{spotPrice?.toLocaleString("en-IN")}</span>
+              {marketClosed && (
+                <span style={{ fontSize:9, fontWeight:800, color:"#d97706", background:"rgba(217,119,6,0.12)", border:"1px solid rgba(217,119,6,0.25)", borderRadius:4, padding:"2px 6px", letterSpacing:"0.06em", textTransform:"uppercase" }}>
+                  Last Session
+                </span>
+              )}
             </div>
           )}
           {expiry && <div style={{ fontSize:9, color:C.textFaint, textTransform:"uppercase", letterSpacing:"0.1em", marginTop:2 }}>Expiry {expiry}</div>}
-          {/* ↑ fixed: was #374151 */}
         </div>
 
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -212,8 +248,21 @@ const OptionChain = ({ onClose }) => {
           </div>
           <span style={{ fontSize:11, color:C.green, fontWeight:800, fontFamily:C.mono }}>{totalQty} qty</span>
         </div>
-        {/* ↓ fixed: was #1f2937 (completely invisible) */}
-        {lastUpdated && <span style={{ fontSize:9, color:C.textFaint, fontFamily:C.mono }}>{lastUpdated}</span>}
+        {lastUpdated && (
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            {dataSource === 'UPSTOX_LAST_SESSION' && (
+              <span style={{ fontSize:8, fontWeight:800, color:"#d97706", background:"rgba(217,119,6,0.10)", border:"1px solid rgba(217,119,6,0.2)", borderRadius:3, padding:"1px 5px", textTransform:"uppercase", letterSpacing:"0.06em" }}>
+                Last Session
+              </span>
+            )}
+            {dataSource === 'UPSTOX_LIVE' && (
+              <span style={{ fontSize:8, fontWeight:800, color:"#34d399", background:"rgba(52,211,153,0.08)", border:"1px solid rgba(52,211,153,0.2)", borderRadius:3, padding:"1px 5px", textTransform:"uppercase", letterSpacing:"0.06em" }}>
+                ● Live
+              </span>
+            )}
+            <span style={{ fontSize:9, color:C.textFaint, fontFamily:C.mono }}>{lastUpdated}</span>
+          </div>
+        )}
       </div>
 
       {/* Column headers */}
@@ -253,7 +302,7 @@ const OptionChain = ({ onClose }) => {
                     background: isATM ? "rgba(30,58,138,0.2)" : "transparent",
                   }}>
                     <td style={{ width:"42%", padding:"2px 6px 2px 3px", background:isITMCall?"rgba(127,29,29,0.08)":"transparent" }}>
-                      <ActionablePriceCell typeCEPE="CE" strike={row.strike} price={row.ce.ltp} chp={row.ce.chp} oi={row.ce.oi} oiRaw={row.ce.oiRaw || 0} maxOiRaw={maxOiRaw} vol={row.ce.vol} onAddLeg={addLeg} selectedLegs={selectedLegs}/>
+                      <ActionablePriceCell typeCEPE="CE" strike={row.strike} price={row.ce.ltp} chp={row.ce.chp} oi={row.ce.oi} oiRaw={row.ce.oiRaw || 0} maxOiRaw={maxOiRaw} vol={row.ce.vol} onAddLeg={addLeg} selectedLegs={selectedLegs} marketClosed={marketClosed}/>
                     </td>
                     <td style={{ width:76, textAlign:"center", padding:"4px 0" }}>
                       <div style={{ fontFamily:C.mono, fontSize:isATM?13:11.5, fontWeight:isATM?900:600, color:isATM?"#60a5fa":C.textMuted }}>
@@ -262,7 +311,7 @@ const OptionChain = ({ onClose }) => {
                       {isATM && <div style={{ fontSize:8, color:"#3b82f6", textTransform:"uppercase", letterSpacing:"0.1em", marginTop:1 }}>ATM</div>}
                     </td>
                     <td style={{ width:"42%", padding:"2px 3px 2px 6px", background:isITMPut?"rgba(6,78,59,0.09)":"transparent" }}>
-                      <ActionablePriceCell typeCEPE="PE" strike={row.strike} price={row.pe.ltp} chp={row.pe.chp} oi={row.pe.oi} oiRaw={row.pe.oiRaw || 0} maxOiRaw={maxOiRaw} vol={row.pe.vol} onAddLeg={addLeg} selectedLegs={selectedLegs}/>
+                      <ActionablePriceCell typeCEPE="PE" strike={row.strike} price={row.pe.ltp} chp={row.pe.chp} oi={row.pe.oi} oiRaw={row.pe.oiRaw || 0} maxOiRaw={maxOiRaw} vol={row.pe.vol} onAddLeg={addLeg} selectedLegs={selectedLegs} marketClosed={marketClosed}/>
                     </td>
                   </tr>
                 );

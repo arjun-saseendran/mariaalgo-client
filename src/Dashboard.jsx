@@ -65,6 +65,8 @@ const Dashboard = () => {
   const [logFilter, setLogFilter] = useState("ALL");
   const [connected, setConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [upstoxStatus, setUpstoxStatus] = useState("connecting"); // "ok" | "error" | "connecting"
+  const [upstoxError,  setUpstoxError]  = useState(null);
   const logsEndRef = useRef(null);
 
   // ── Data Polling ──────────────────────────────────────────────────────────
@@ -77,7 +79,31 @@ const Dashboard = () => {
           fetch("https://api.mariaalgo.online/api/history"),
         ]);
         if (tRes.ok) setTrafficData(await tRes.json());
-        if (cRes.ok) setCondorData(await cRes.json());
+        if (cRes.ok) {
+          const cData = await cRes.json();
+          setCondorData(cData);
+          // Upstox WS feed health — only flag error if market is open AND all prices are 0
+          const marketHours = (() => {
+            const now  = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+            const day  = now.getDay();
+            const mins = now.getHours() * 60 + now.getMinutes();
+            return day >= 1 && day <= 5 && mins >= (9 * 60 + 15) && mins < (15 * 60 + 30);
+          })();
+          if (marketHours && cData.length > 0 && cData[0].status !== "COMPLETED") {
+            const allZero = ["call","put"].every(s => parseFloat(cData[0]?.[s]?.current) === 0);
+            if (allZero) {
+              setUpstoxStatus("error");
+              setUpstoxError("Live prices unavailable — Upstox WS feed disconnected");
+            } else {
+              setUpstoxStatus("ok");
+              setUpstoxError(null);
+            }
+          } else {
+            // Outside market hours or no active trade — feed is fine
+            setUpstoxStatus("ok");
+            setUpstoxError(null);
+          }
+        }
         if (hRes.ok) setHistory(await hRes.json());
         setLastUpdate(new Date());
       } catch (err) { console.error("❌ Fetch Error:", err); }
@@ -92,10 +118,17 @@ const Dashboard = () => {
     socket.on("connect",    () => setConnected(true));
     socket.on("disconnect", () => setConnected(false));
 
+    // Upstox WS health events emitted by upstoxLiveData.js
+    socket.on("upstox_status", ({ status, message }) => {
+      setUpstoxStatus(status); // "ok" | "error" | "connecting"
+      setUpstoxError(status === "error" ? message : null);
+    });
+
     socket.on("market_tick", (data) => {
       // Only use spot-based estimate when no option LTP is available yet
       setTrafficData((prev) => {
         if (prev.signal !== "ACTIVE" || !prev.direction || !prev.entryPrice || prev._optionLtpReceived) return prev;
+
         const pts = prev.direction === "CE"
           ? data.price - prev.entryPrice
           : prev.entryPrice - data.price;
@@ -124,6 +157,7 @@ const Dashboard = () => {
     return () => {
       socket.off("connect");
       socket.off("disconnect");
+      socket.off("upstox_status");
       socket.off("market_tick");
       socket.off("option_tick");
       socket.off("trade_log");
@@ -178,11 +212,44 @@ const Dashboard = () => {
 
       <div className="p-6 space-y-6">
 
+        {/* ── Upstox Feed Error Banner ── */}
+        {upstoxStatus === "error" && (
+          <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
+            <AlertCircle size={14} className="text-red-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="text-red-400 text-xs font-black uppercase tracking-widest">Upstox Feed Down</span>
+              <p className="text-red-400/70 text-[10px] mt-0.5">{upstoxError || "Iron Condor live prices unavailable — reconnecting…"}</p>
+            </div>
+            <div className="text-[9px] text-red-500/60 font-mono shrink-0">auto-reconnect active</div>
+          </div>
+        )}
+        {upstoxStatus === "connecting" && connected && (
+          <div className="flex items-center gap-3 bg-yellow-500/8 border border-yellow-500/20 rounded-xl px-4 py-3">
+            <Clock size={14} className="text-yellow-500 shrink-0" />
+            <span className="text-yellow-500/80 text-xs font-bold">Connecting to Upstox feed…</span>
+          </div>
+        )}
+
         {/* ── Iron Condor Table ── */}
         <div className="bg-[#0a0a0c] border border-gray-800 rounded-2xl overflow-hidden shadow-2xl">
           <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-800/60">
             <Shield size={13} className="text-yellow-500" />
             <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Live Iron Condor</span>
+            {/* Upstox feed dot */}
+            <div className="ml-auto flex items-center gap-1.5">
+              <div className={`w-1.5 h-1.5 rounded-full ${
+                upstoxStatus === "ok"    ? "bg-emerald-500 animate-pulse" :
+                upstoxStatus === "error" ? "bg-red-500 animate-pulse" :
+                                          "bg-yellow-500 animate-pulse"
+              }`} />
+              <span className={`text-[9px] uppercase tracking-widest font-bold ${
+                upstoxStatus === "ok"    ? "text-emerald-500" :
+                upstoxStatus === "error" ? "text-red-500" : "text-yellow-500"
+              }`}>
+                {upstoxStatus === "error" ? "Feed Down" :
+                 upstoxStatus === "ok"    ? "Feed Live" : "Connecting"}
+              </span>
+            </div>
           </div>
           <table className="w-full text-left">
             <thead>
@@ -232,19 +299,23 @@ const Dashboard = () => {
                   <tr className="border-b border-gray-800/30">
                     <td className="py-3 px-5 text-center text-red-400 text-[10px] font-black">CALL</td>
                     <td className="text-center font-mono text-xs">₹{row.call.entry}</td>
-                    <td className="text-center font-mono text-xs">₹{row.call.current}</td>
+                    <td className={`text-center font-mono text-xs ${upstoxStatus === "error" ? "text-red-500/50" : ""}`}>
+                      {upstoxStatus === "error" ? <span title="Feed down">—</span> : `₹${row.call.current}`}
+                    </td>
                     <td className="text-center font-mono text-xs text-emerald-500">₹{row.call.profit70}</td>
                     <td className="text-center font-mono text-xs text-orange-400">₹{row.call.firefight}</td>
                     <td className="text-center font-mono text-xs text-red-400">₹{row.call.sl}</td>
                     <td className="text-center font-bold text-sm" rowSpan="2">{row.quantity}</td>
-                    <td className={`text-right pr-5 font-black text-base ${parseFloat(row.totalPnL) >= 0 ? "text-emerald-400" : "text-red-400"}`} rowSpan="2">
-                      ₹{row.totalPnL}
+                    <td className={`text-right pr-5 font-black text-base ${upstoxStatus === "error" ? "text-gray-600" : parseFloat(row.totalPnL) >= 0 ? "text-emerald-400" : "text-red-400"}`} rowSpan="2">
+                      {upstoxStatus === "error" ? <span className="text-[10px] text-red-500/50 font-normal">feed down</span> : `₹${row.totalPnL}`}
                     </td>
                   </tr>
                   <tr>
                     <td className="py-3 px-5 text-center text-emerald-400 text-[10px] font-black">PUT</td>
                     <td className="text-center font-mono text-xs">₹{row.put.entry}</td>
-                    <td className="text-center font-mono text-xs">₹{row.put.current}</td>
+                    <td className={`text-center font-mono text-xs ${upstoxStatus === "error" ? "text-red-500/50" : ""}`}>
+                      {upstoxStatus === "error" ? <span title="Feed down">—</span> : `₹${row.put.current}`}
+                    </td>
                     <td className="text-center font-mono text-xs text-emerald-500">₹{row.put.profit70}</td>
                     <td className="text-center font-mono text-xs text-orange-400">₹{row.put.firefight}</td>
                     <td className="text-center font-mono text-xs text-red-400">₹{row.put.sl}</td>
