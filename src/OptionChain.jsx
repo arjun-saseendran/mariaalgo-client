@@ -3,6 +3,11 @@ import { ArrowLeft, RefreshCw, Plus, Minus, Zap } from "lucide-react";
 
 const LOT_SIZE    = { NIFTY: 65, SENSEX: 20 };
 const STRIKE_RANGE = 30;
+// ✅ FIX: was inverted — if VITE_API_URL set it used hardcoded localhost:3000 instead of the env value
+const SERVER_URL = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL
+  : "https://api.mariaalgo.online";
+
 
 // ─── Color tokens (all verified visible on #070709 background) ───────────────
 const C = {
@@ -126,7 +131,7 @@ const OptionChain = ({ onClose }) => {
 
   const fetchChain = async () => {
     try {
-      const res = await fetch(`https://api.mariaalgo.online/api/options/chain?symbol=${symbol}&strikes=${STRIKE_RANGE}`);
+      const res = await fetch(`${SERVER_URL}/api/options/chain?symbol=${symbol}&strikes=${STRIKE_RANGE}`);
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
         setFetchError(errBody.error || `Server error ${res.status}`);
@@ -172,7 +177,7 @@ const OptionChain = ({ onClose }) => {
     if (!window.confirm(`Execute ${selectedLegs.length} legs × ${lots} lot${lots > 1 ? "s" : ""} = ${totalQty} qty?`)) return;
     setIsExecuting(true);
     try {
-      const res = await fetch("https://api.mariaalgo.online/api/trades/execute-basket", {
+      const res = await fetch(`${SERVER_URL}/api/trades/execute-basket`, {  // ✅ FIX: was hardcoded prod URL
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ symbol, lots, legs: selectedLegs }),
       });
@@ -286,6 +291,14 @@ const OptionChain = ({ onClose }) => {
         {loading ? (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100%", color:C.textMuted, gap:8, fontSize:13 }}>
             <RefreshCw size={16} style={{ animation:"spin 1s linear infinite" }}/> Loading...
+          </div>
+        ) : fetchError ? (
+          /* ✅ FIX: fetchError was set but never shown — user saw blank spinner forever on API failure */
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"100%", gap:12 }}>
+            <div style={{ fontSize:12, color:"#f87171", fontWeight:700 }}>⚠ {fetchError}</div>
+            <button onClick={fetchChain} style={{ fontSize:11, color:C.textMuted, background:"#111827", border:"1px solid #1f2937", borderRadius:7, padding:"6px 16px", cursor:"pointer", fontWeight:700 }}>
+              Retry
+            </button>
           </div>
         ) : (
           <table style={{ width:"100%", borderCollapse:"collapse" }}>
