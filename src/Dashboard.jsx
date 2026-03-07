@@ -21,12 +21,12 @@ import logo from "./assets/logo.png";
 // Iron Condor server (port 3002) — condor positions, auto-condor, options, socket
 const IC_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL
-  : "https://api.mariaalgo.online";
+  : "https://mariaalgo.online";
 
-// Traffic Light server (port 3001) — traffic status, TL history
+// Traffic Light server (port 3001) — proxied under /tl/ by nginx
 const TL_URL = import.meta.env.VITE_TRAFFIC_URL
   ? import.meta.env.VITE_TRAFFIC_URL
-  : "https://api.mariaalgo.online/traffic";
+  : "https://mariaalgo.online/tl";
 
 const socket = io(IC_URL, { withCredentials: true });
 
