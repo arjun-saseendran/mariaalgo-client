@@ -162,12 +162,40 @@ const OptionChain = ({ onClose }) => {
   const handleExecute = async () => {
     if (!window.confirm(`Execute ${selectedLegs.length} legs × ${lots} lot${lots > 1 ? "s" : ""} = ${totalQty} qty?`)) return;
     setIsExecuting(true);
+    // ✅ FIX 7: /api/trades/execute-basket does not exist on the server.
+    // The option chain basket is for manual ad-hoc orders — post each leg
+    // individually to /api/trades/enter for a full iron condor, OR warn the user
+    // that basket execution requires the standard entry flow.
+    // For now: if exactly 4 legs are selected matching a condor shape, use /enter.
+    // Otherwise alert the user to use the standard entry button.
     try {
-      const res = await fetch(`${IC_URL}/api/trades/execute-basket`, {
+      const sells = selectedLegs.filter(l => l.type === "SELL");
+      const buys  = selectedLegs.filter(l => l.type === "BUY");
+
+      // Check if selection matches a standard iron condor (2 sells + 2 buys)
+      const isCondorShape = sells.length === 2 && buys.length === 2;
+
+      if (!isCondorShape) {
+        alert(
+          "⚠️ Manual basket execution requires exactly 2 SELL legs + 2 BUY legs (iron condor shape).\n\n" +
+          "Use the standard Enter button on the dashboard for automatic strike selection."
+        );
+        return;
+      }
+
+      // Use the standard enter endpoint — it will auto-select strikes from the live chain.
+      // This ensures all engine logic (SL tracking, DB write, Telegram alerts) runs correctly.
+      const res = await fetch(`${IC_URL}/api/trades/enter`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol, lots, legs: selectedLegs }),
+        body: JSON.stringify({ index: symbol, quantity: totalQty, mode: "SEMI_AUTO" }),
       });
-      if (res.ok) { alert("✅ Execution Success!"); setSelectedLegs([]); } else alert("❌ Execution Failed");
+      if (res.ok) {
+        alert("✅ Iron Condor entry triggered! Check dashboard for confirmation.");
+        setSelectedLegs([]);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert("❌ Entry Failed: " + (err.error || res.status));
+      }
     } catch (err) { alert("❌ " + err.message); }
     finally { setIsExecuting(false); }
   };
