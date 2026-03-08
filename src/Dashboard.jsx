@@ -158,11 +158,9 @@ const Dashboard = () => {
         if (hRes.ok) setHistory(await hRes.json());
   if (aRes.ok) {
     const d = await aRes.json();
-    // Only sync auto mode from server if the user hasn't manually armed it.
-    // entryDone=true means a trade was actually entered this session.
-    // If armed but entryDone=false (holiday / wrong weekday), keep showing ON.
+    // ✅ armed is now a real server-side flag — sync directly from it
     if (!autoArmedRef.current) {
-      setAutoMode(d.entryDone === true);
+      setAutoMode(d.armed === true);
     }
     setAutoStatus(d);
   }
@@ -223,6 +221,8 @@ const Dashboard = () => {
         if (res.ok) {
           autoArmedRef.current = false;
           setAutoMode(false);
+          // ✅ Clear condor logs so stale "armed but waiting" messages don't linger
+          setLogs(prev => prev.filter(l => l.strategy !== "CONDOR"));
         }
       } else {
         // Trigger immediate entry check (will no-op on holidays/wrong day — that's correct)
@@ -326,7 +326,6 @@ const Dashboard = () => {
                   <Zap size={10} className={autoMode ? "text-emerald-400" : "text-slate-600"} />
                   {autoToggling ? "…"
                     : autoMode
-                      // entryDone=true means a trade is actually live this session
                       ? (autoStatus?.entryDone ? "Auto ACTIVE" : "Auto ARMED")
                       : "Auto OFF"}
                   {autoMode && autoStatus?.gapOpenHold && (
