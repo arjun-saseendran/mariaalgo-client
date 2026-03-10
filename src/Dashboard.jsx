@@ -82,8 +82,8 @@ const SectionHeader = ({ icon: Icon, title, iconColor = "text-slate-400", right 
 
 const PnlSourcePill = ({ source }) => {
   if (!source) return null;
-  return source === "FYERS_ACTUAL"
-    ? <Tag variant="success">✓ Actual</Tag>
+  return source === "kite"
+    ? <Tag variant="success">✓ Kite</Tag>
     : <Tag variant="warning">~ Est.</Tag>;
 };
 
@@ -115,8 +115,8 @@ const Dashboard = () => {
   const [logFilter,     setLogFilter]     = useState("ALL");
   const [connected,     setConnected]     = useState(false);
   const [lastUpdate,    setLastUpdate]    = useState(null);
-  const [upstoxStatus,  setUpstoxStatus]  = useState("connecting");
-  const [upstoxError,   setUpstoxError]   = useState(null);
+  const [feedStatus,  setFeedStatus]  = useState("connecting");
+  const [feedError,   setFeedError]   = useState(null);
   const [autoMode,      setAutoMode]      = useState(false);
   const [autoStatus,    setAutoStatus]    = useState(null);
   const [autoToggling,  setAutoToggling]  = useState(false);
@@ -151,9 +151,9 @@ const Dashboard = () => {
           })();
           if (marketHours && cData.length > 0 && cData[0].status !== "COMPLETED") {
             const allZero = ["call","put"].every(s => parseFloat(cData[0]?.[s]?.current) === 0);
-            setUpstoxStatus(allZero ? "error" : "ok");
-            setUpstoxError(allZero ? "Live prices unavailable — Upstox WS feed disconnected" : null);
-          } else { setUpstoxStatus("ok"); setUpstoxError(null); }
+            setFeedStatus(allZero ? "error" : "ok");
+            setFeedError(allZero ? "Live prices unavailable — Kite WebSocket feed down" : null);
+          } else { setFeedStatus("ok"); setFeedError(null); }
         }
         if (hRes.ok) setHistory(await hRes.json());
   if (aRes.ok) {
@@ -176,7 +176,7 @@ const Dashboard = () => {
   useEffect(() => {
     socket.on("connect",    () => setConnected(true));
     socket.on("disconnect", () => setConnected(false));
-    socket.on("upstox_status", ({ status, message }) => { setUpstoxStatus(status); setUpstoxError(status === "error" ? message : null); });
+    socket.on("upstox_status", ({ status, message }) => { setFeedStatus(status); setFeedError(status === "error" ? message : null); });
     socket.on("auto_condor_tick", d => setAutoStatus(d));
     socket.on("market_tick", data => {
       setTrafficData(prev => {
@@ -288,20 +288,20 @@ const Dashboard = () => {
       <div className="relative z-10 p-5 space-y-4 max-w-screen-xl mx-auto">
 
         {/* ── Feed alert ─────────────────────────────────────────────────── */}
-        {upstoxStatus === "error" && (
+        {feedStatus === "error" && (
           <div className="flex items-center gap-3 bg-red-500/8 border border-red-500/25 rounded-xl px-4 py-3">
             <AlertTriangle size={13} className="text-red-400 shrink-0" />
             <div className="flex-1 min-w-0">
-              <span className="text-red-400 text-[10px] font-black uppercase tracking-widest">Upstox Feed Down</span>
-              <p className="text-red-500/60 text-[9px] mt-0.5">{upstoxError || "Iron Condor live prices unavailable — reconnecting…"}</p>
+              <span className="text-red-400 text-[10px] font-black uppercase tracking-widest">Kite Feed Down</span>
+              <p className="text-red-500/60 text-[9px] mt-0.5">{feedError || "Iron Condor live prices unavailable — reconnecting…"}</p>
             </div>
             <span className="text-[8px] text-red-600/50 font-mono shrink-0">auto-reconnect</span>
           </div>
         )}
-        {upstoxStatus === "connecting" && connected && (
+        {feedStatus === "connecting" && connected && (
           <div className="flex items-center gap-3 bg-amber-500/6 border border-amber-500/15 rounded-xl px-4 py-3">
             <Clock size={12} className="text-amber-500 shrink-0" />
-            <span className="text-amber-500/80 text-[10px] font-bold">Connecting to Upstox feed…</span>
+            <span className="text-amber-500/80 text-[10px] font-bold">Connecting to Kite feed…</span>
           </div>
         )}
 
@@ -332,7 +332,7 @@ const Dashboard = () => {
                     <span className="ml-1 text-amber-400/80">Hold</span>
                   )}
                 </button>
-                <FeedDot status={upstoxStatus} />
+                <FeedDot status={feedStatus} />
               </>
             }
           />
@@ -381,12 +381,12 @@ const Dashboard = () => {
                         <div className="w-px h-8 bg-slate-800" />
                         <div className="text-center">
                           <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">Qty</div>
-                          <div className="text-sm font-black text-slate-300 font-mono">{row.quantity}</div>
+                          <div className="text-sm font-black text-slate-300 font-mono">{row.quantity ?? "—"}</div>
                         </div>
                         <div className="w-px h-8 bg-slate-800" />
                         <div className="text-center">
                           <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">Booked</div>
-                          <div className="text-sm font-black text-emerald-500 font-mono">₹{row.bufferPremium}</div>
+                          <div className="text-sm font-black text-emerald-500 font-mono">₹{row.buffer}</div>
                         </div>
                         {/* ✅ FIX 4: API field is `slCount` not `spreadSLCount` */}
                         {row.slCount > 0 && (
@@ -401,9 +401,9 @@ const Dashboard = () => {
                       </div>
                       <div className="text-right">
                         <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">Live P&L</div>
-                        <div className={`text-2xl font-black font-mono ${upstoxStatus === "error" ? "text-slate-700" : pnlPos ? "text-emerald-400" : "text-red-400"}`}>
+                        <div className={`text-2xl font-black font-mono ${feedStatus === "error" ? "text-slate-700" : pnlPos ? "text-emerald-400" : "text-red-400"}`}>
                           {/* ✅ FIX 4: API field is `pnl` not `totalPnL` */}
-                          {upstoxStatus === "error" ? "—" : `₹${row.pnl}`}
+                          {feedStatus === "error" ? "—" : `₹${row.pnl}`}
                         </div>
                       </div>
                     </div>
@@ -426,8 +426,8 @@ const Dashboard = () => {
                           </div>
                           <div>
                             <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-1">Live</div>
-                            <div className={`font-mono text-xs font-bold ${upstoxStatus === "error" ? "text-slate-700" : ""}`}>
-                              {upstoxStatus === "error" ? "—" : `₹${row.call.current}`}
+                            <div className={`font-mono text-xs font-bold ${feedStatus === "error" ? "text-slate-700" : ""}`}>
+                              {feedStatus === "error" ? "—" : `₹${row.call.current}`}
                             </div>
                           </div>
                           <div>
@@ -470,8 +470,8 @@ const Dashboard = () => {
                           </div>
                           <div>
                             <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-1">Live</div>
-                            <div className={`font-mono text-xs font-bold ${upstoxStatus === "error" ? "text-slate-700" : ""}`}>
-                              {upstoxStatus === "error" ? "—" : `₹${row.put.current}`}
+                            <div className={`font-mono text-xs font-bold ${feedStatus === "error" ? "text-slate-700" : ""}`}>
+                              {feedStatus === "error" ? "—" : `₹${row.put.current}`}
                             </div>
                           </div>
                           <div>
@@ -505,16 +505,36 @@ const Dashboard = () => {
                         <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest">
                           Firefight Pending — {row.firefightSide?.toUpperCase()} side
                         </span>
-                        <span className="text-[9px] text-slate-500 ml-auto">Action required on dashboard</span>
+                        {/* ✅ FIX: added action button — semi-auto user was seeing the alert with no way to act */}
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm("Execute firefight now?")) return;
+                            const res = await fetch(`${IC_URL}/api/trades/firefight`, { method: "POST" });
+                            if (!res.ok) alert("Firefight failed: " + (await res.json().catch(()=>({}))).error);
+                          }}
+                          className="ml-auto px-3 py-1 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 text-[9px] font-black uppercase tracking-widest rounded-md transition-all"
+                        >
+                          Execute ⚡
+                        </button>
                       </div>
                     )}
                     {row.butterflyPending && !row.isButterfly && (
                       <div className="flex items-center gap-2 bg-purple-500/8 border border-purple-500/25 rounded-lg px-3 py-2">
                         <Activity size={11} className="text-purple-400" />
                         <span className="text-[9px] font-black text-purple-400 uppercase tracking-widest">
-                          Butterfly Conversion Pending
+                          Butterfly Conversion Pending — Sell leg at ATM + SL hit
                         </span>
-                        <span className="text-[9px] text-slate-500 ml-auto">Sell leg at ATM + SL hit</span>
+                        {/* ✅ FIX: added action button — semi-auto user was seeing the alert with no way to act */}
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm("Convert to Iron Butterfly now?")) return;
+                            const res = await fetch(`${IC_URL}/api/trades/butterfly`, { method: "POST" });
+                            if (!res.ok) alert("Butterfly failed: " + (await res.json().catch(()=>({}))).error);
+                          }}
+                          className="ml-auto px-3 py-1 bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-400 text-[9px] font-black uppercase tracking-widest rounded-md transition-all"
+                        >
+                          Convert 🦋
+                        </button>
                       </div>
                     )}
                     {/* Butterfly SL badge */}

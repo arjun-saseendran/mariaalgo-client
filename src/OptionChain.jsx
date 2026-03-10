@@ -236,9 +236,9 @@ const OptionChain = ({ onClose }) => {
                     Last Session
                   </span>
                 )}
-                {!marketClosed && dataSource === "UPSTOX_LIVE" && (
+                {!marketClosed && dataSource === "KITE_LIVE" && (
                   <span style={{ fontSize: 8, fontWeight: 800, color: "#059669", background: "rgba(5,150,105,0.08)", border: "1px solid rgba(5,150,105,0.2)", borderRadius: 5, padding: "2px 7px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                    ● Live
+                    ● Kite Live
                   </span>
                 )}
               </div>
