@@ -161,6 +161,7 @@ const Dashboard = () => {
   const [connected, setConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [feedStatus, setFeedStatus] = useState("connecting");
+  const [tlFeedStatus, setTlFeedStatus] = useState("connecting");
   const [feedError, setFeedError] = useState(null);
   const [autoMode, setAutoMode] = useState(false);
   const [autoStatus, setAutoStatus] = useState(null);
@@ -175,7 +176,7 @@ const Dashboard = () => {
         const [tRes, cRes, hRes, aRes] = await Promise.all([
           fetch(`${TL_URL}/api/traffic/status`),
           fetch(`${IC_URL}/api/condor/positions`),
-          fetch(`${TL_URL}/api/history`),  // ✅ FIX: Traffic Light history from TL server (port 3001)
+          fetch(`${TL_URL}/api/history`),
           fetch(`${IC_URL}/api/auto-condor/status`),
         ]);
         if (tRes.ok) setTrafficData(await tRes.json());
@@ -232,6 +233,7 @@ const Dashboard = () => {
 
   /* ── Socket ────────────────────────────────────────────────────────────── */
   useEffect(() => {
+    // Iron Condor Sockets
     socket.on("connect", () => setConnected(true));
     socket.on("disconnect", () => setConnected(false));
     socket.on("upstox_status", ({ status, message }) => {
@@ -270,7 +272,10 @@ const Dashboard = () => {
     socket.on("trade_log", (entry) =>
       setLogs((prev) => [...prev, entry].slice(-200)),
     );
-    // ✅ FIX: also listen to Traffic Light socket for TRAFFIC logs and market ticks
+
+    // Traffic Light Sockets
+    tlSocket.on("connect", () => setTlFeedStatus("ok"));
+    tlSocket.on("disconnect", () => setTlFeedStatus("error"));
     tlSocket.on("trade_log", (entry) =>
       setLogs((prev) => [...prev, entry].slice(-200)),
     );
@@ -281,6 +286,7 @@ const Dashboard = () => {
         return { ...prev, livePnL: (pts * 65).toFixed(2), pnlSource: "spot" };
       });
     });
+
     return () => {
       [
         "connect",
@@ -291,7 +297,11 @@ const Dashboard = () => {
         "option_tick",
         "trade_log",
       ].forEach((e) => socket.off(e));
+      
+      tlSocket.off("connect");
+      tlSocket.off("disconnect");
       tlSocket.off("trade_log");
+      tlSocket.off("market_tick");
     };
   }, []);
 
@@ -366,7 +376,7 @@ const Dashboard = () => {
       />
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="relative z-10 flex items-center justify-between px-6 py-3.5 border-b border-slate-800/80 bg-[#08080c]/80 backdrop-blur-sm">
+      <header className="relative z-10 flex flex-wrap items-center justify-between gap-4 px-6 py-3.5 border-b border-slate-800/80 bg-[#08080c]/80 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <div className="relative">
             <img src={logo} alt="Logo" className="w-8 h-8 rounded-lg" />
@@ -403,7 +413,7 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <div className="relative z-10 p-5 space-y-4 max-w-screen-xl mx-auto">
+      <div className="relative z-10 p-3 sm:p-5 space-y-4 max-w-screen-xl mx-auto">
         {/* ── Feed alert ─────────────────────────────────────────────────── */}
         {feedStatus === "error" && (
           <div className="flex items-center gap-3 bg-red-500/8 border border-red-500/25 rounded-xl px-4 py-3">
@@ -439,7 +449,6 @@ const Dashboard = () => {
             iconColor="text-amber-500/80"
             right={
               <>
-                {/* Auto mode toggle */}
                 <button
                   onClick={toggleAutoMode}
                   disabled={autoToggling}
@@ -453,13 +462,18 @@ const Dashboard = () => {
                     size={10}
                     className={autoMode ? "text-emerald-400" : "text-slate-600"}
                   />
-                  {autoToggling
-                    ? "…"
-                    : autoMode
-                      ? autoStatus?.entryDone
-                        ? "Auto ACTIVE"
-                        : "Auto ARMED"
-                      : "Auto OFF"}
+                  <span className="hidden sm:inline">
+                    {autoToggling
+                      ? "…"
+                      : autoMode
+                        ? autoStatus?.entryDone
+                          ? "Auto ACTIVE"
+                          : "Auto ARMED"
+                        : "Auto OFF"}
+                  </span>
+                  <span className="sm:hidden">
+                    {autoMode ? "AUTO" : "OFF"}
+                  </span>
                   {autoMode && autoStatus?.gapOpenHold && (
                     <span className="ml-1 text-amber-400/80">Hold</span>
                   )}
@@ -486,7 +500,7 @@ const Dashboard = () => {
                 <span className="text-slate-400 text-xs font-mono">
                   {condorData[0].index}
                 </span>
-                <span className="text-slate-500 text-xs">
+                <span className="text-slate-500 text-xs hidden sm:inline">
                   {condorData[0].exitReason?.replace(/_/g, " ")}
                 </span>
               </div>
@@ -512,9 +526,9 @@ const Dashboard = () => {
                 return (
                   <div key={i} className="space-y-3">
                     {/* Summary bar */}
-                    <div className="flex items-center justify-between bg-[#0d0d10] rounded-xl px-4 py-3 border border-slate-800/50">
-                      <div className="flex items-center gap-4">
-                        <div className="text-center">
+                    <div className="flex flex-wrap sm:flex-nowrap items-center justify-between bg-[#0d0d10] rounded-xl px-4 py-3 border border-slate-800/50 gap-4">
+                      <div className="flex items-center gap-4 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+                        <div className="text-center shrink-0">
                           <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">
                             Index
                           </div>
@@ -522,8 +536,8 @@ const Dashboard = () => {
                             {row.index}
                           </div>
                         </div>
-                        <div className="w-px h-8 bg-slate-800" />
-                        <div className="text-center">
+                        <div className="w-px h-8 bg-slate-800 shrink-0" />
+                        <div className="text-center shrink-0">
                           <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">
                             Qty
                           </div>
@@ -531,8 +545,8 @@ const Dashboard = () => {
                             {row.quantity ?? "—"}
                           </div>
                         </div>
-                        <div className="w-px h-8 bg-slate-800" />
-                        <div className="text-center">
+                        <div className="w-px h-8 bg-slate-800 shrink-0" />
+                        <div className="text-center shrink-0">
                           <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">
                             Booked
                           </div>
@@ -542,8 +556,8 @@ const Dashboard = () => {
                         </div>
                         {row.slCount > 0 && (
                           <>
-                            <div className="w-px h-8 bg-slate-800" />
-                            <div className="text-center">
+                            <div className="w-px h-8 bg-slate-800 shrink-0" />
+                            <div className="text-center shrink-0">
                               <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">
                                 SL Hits
                               </div>
@@ -554,7 +568,7 @@ const Dashboard = () => {
                           </>
                         )}
                       </div>
-                      <div className="text-right">
+                      <div className="text-left sm:text-right w-full sm:w-auto border-t border-slate-800/50 sm:border-t-0 pt-2 sm:pt-0">
                         <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">
                           Live P&L
                         </div>
@@ -567,7 +581,7 @@ const Dashboard = () => {
                     </div>
 
                     {/* Legs grid */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {/* CALL leg */}
                       <div className="bg-[#0d0d10] border border-red-900/20 rounded-xl p-4 space-y-3">
                         <div className="flex items-center justify-between">
@@ -789,9 +803,7 @@ const Dashboard = () => {
               title="Traffic Light"
               iconColor="text-emerald-500/80"
               right={
-                <div className="flex items-center gap-2">
-                  {/* ── GREEN DOT: uses socket connected state for TL feed ── */}
-                  <FeedDot status={connected ? "ok" : "error"} />
+                <>
                   <Tag
                     variant={
                       trafficData.signal === "ACTIVE"
@@ -803,13 +815,14 @@ const Dashboard = () => {
                   >
                     {trafficData.signal}
                   </Tag>
-                </div>
+                  <FeedDot status={tlFeedStatus} />
+                </>
               }
             />
 
             <div className="p-4">
               {trafficData.signal === "ACTIVE" ? (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <StatCard
                     label="Direction"
                     accent={trafficData.direction === "CE" ? "emerald" : "red"}
@@ -884,7 +897,7 @@ const Dashboard = () => {
                     {trafficData.signal}
                   </div>
                   {trafficData.breakoutHigh > 0 && (
-                    <div className="grid grid-cols-2 gap-3 w-full">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-md">
                       <StatCard
                         label="Range High"
                         value={trafficData.breakoutHigh}
@@ -1027,7 +1040,7 @@ const Dashboard = () => {
               iconColor="text-blue-400/70"
               right={
                 <div className="flex items-center gap-2">
-                  <span className="text-[8px] text-slate-700 uppercase tracking-wider">
+                  <span className="text-[8px] text-slate-700 uppercase tracking-wider hidden sm:inline">
                     PnL:
                   </span>
                   <Tag variant="success">✓ Actual</Tag>
@@ -1035,56 +1048,58 @@ const Dashboard = () => {
                 </div>
               }
             />
-            <table className="w-full text-left">
-              <thead>
-                <tr className="text-[8px] uppercase tracking-widest text-slate-700 border-b border-slate-800/60">
-                  <th className="py-2.5 px-5">Strategy</th>
-                  <th className="py-2.5">Symbol</th>
-                  <th className="py-2.5">Exit Reason</th>
-                  <th className="py-2.5 text-center">Source</th>
-                  <th className="py-2.5 pr-5 text-right">P&L</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((h, i) => {
-                  const srcMatch = h.notes?.match(
-                    /PnL Source:\s*(FYERS_ACTUAL|ESTIMATED_SPOT)/,
-                  );
-                  const pnlSrc = srcMatch?.[1] || null;
-                  const hPnl = parseFloat(h.pnl);
-                  return (
-                    <tr
-                      key={i}
-                      className="border-b border-slate-800/30 hover:bg-slate-900/20 transition-colors group"
-                    >
-                      <td className="py-3 px-5">
-                        <Tag
-                          variant={
-                            h.strategy === "IRON_CONDOR" ? "warning" : "success"
-                          }
-                        >
-                          {h.strategy === "IRON_CONDOR" ? "IC" : "TL"}
-                        </Tag>
-                      </td>
-                      <td className="font-mono text-[10px] text-slate-400 group-hover:text-slate-300 transition-colors">
-                        {h.symbol}
-                      </td>
-                      <td className="text-[10px] text-slate-600">
-                        {h.exitReason?.replace(/_/g, " ")}
-                      </td>
-                      <td className="text-center">
-                        <PnlSourcePill source={pnlSrc} />
-                      </td>
-                      <td
-                        className={`pr-5 text-right font-black text-sm font-mono ${hPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left whitespace-nowrap">
+                <thead>
+                  <tr className="text-[8px] uppercase tracking-widest text-slate-700 border-b border-slate-800/60">
+                    <th className="py-2.5 px-5">Strategy</th>
+                    <th className="py-2.5 px-2">Symbol</th>
+                    <th className="py-2.5 px-2">Exit Reason</th>
+                    <th className="py-2.5 px-2 text-center">Source</th>
+                    <th className="py-2.5 pr-5 text-right">P&L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((h, i) => {
+                    const srcMatch = h.notes?.match(
+                      /PnL Source:\s*(FYERS_ACTUAL|ESTIMATED_SPOT)/,
+                    );
+                    const pnlSrc = srcMatch?.[1] || null;
+                    const hPnl = parseFloat(h.pnl);
+                    return (
+                      <tr
+                        key={i}
+                        className="border-b border-slate-800/30 hover:bg-slate-900/20 transition-colors group"
                       >
-                        {hPnl >= 0 ? "+" : ""}₹{hPnl.toFixed(2)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        <td className="py-3 px-5">
+                          <Tag
+                            variant={
+                              h.strategy === "IRON_CONDOR" ? "warning" : "success"
+                            }
+                          >
+                            {h.strategy === "IRON_CONDOR" ? "IC" : "TL"}
+                          </Tag>
+                        </td>
+                        <td className="px-2 font-mono text-[10px] text-slate-400 group-hover:text-slate-300 transition-colors">
+                          {h.symbol}
+                        </td>
+                        <td className="px-2 text-[10px] text-slate-600">
+                          {h.exitReason?.replace(/_/g, " ")}
+                        </td>
+                        <td className="px-2 text-center">
+                          <PnlSourcePill source={pnlSrc} />
+                        </td>
+                        <td
+                          className={`pr-5 text-right font-black text-sm font-mono ${hPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                        >
+                          {hPnl >= 0 ? "+" : ""}₹{hPnl.toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

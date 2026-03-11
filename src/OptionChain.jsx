@@ -51,6 +51,7 @@ const ActionablePriceCell = ({ typeCEPE, strike, price, chp, oi, oiRaw, maxOiRaw
     <div style={{ display: "flex", alignItems: "stretch", height: "100%", minHeight: 52 }}>
       {/* BUY button */}
       <button
+        className="btn-action"
         onClick={() => onAddLeg("BUY", strike, typeCEPE, price)}
         style={{
           ...btnBase,
@@ -71,7 +72,7 @@ const ActionablePriceCell = ({ typeCEPE, strike, price, chp, oi, oiRaw, maxOiRaw
         background: "rgba(255,255,255,0.018)",
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -1px 0 rgba(255,255,255,0.04)",
       }}>
-        <span style={{ fontFamily: C.mono, fontWeight: 700, fontSize: 12.5, letterSpacing: "-0.025em", lineHeight: 1.2, color: hasPrice ? C.text : C.textDead }}>
+        <span className="price-data-text" style={{ fontFamily: C.mono, fontWeight: 700, fontSize: 12.5, letterSpacing: "-0.025em", lineHeight: 1.2, color: hasPrice ? C.text : C.textDead }}>
           {hasPrice ? price.toFixed(2) : "—"}
         </span>
         {chp !== 0 && (
@@ -80,7 +81,7 @@ const ActionablePriceCell = ({ typeCEPE, strike, price, chp, oi, oiRaw, maxOiRaw
           </span>
         )}
         {(oiRaw > 0 || hasPrice) && (
-          <span style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.2, marginTop: 1 }}>
+          <span className="hide-mobile" style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.2, marginTop: 1 }}>
             {oi} · {vol}
           </span>
         )}
@@ -93,6 +94,7 @@ const ActionablePriceCell = ({ typeCEPE, strike, price, chp, oi, oiRaw, maxOiRaw
 
       {/* SELL button */}
       <button
+        className="btn-action"
         onClick={() => onAddLeg("SELL", strike, typeCEPE, price)}
         style={{
           ...btnBase,
@@ -162,12 +164,7 @@ const OptionChain = ({ onClose }) => {
   const handleExecute = async () => {
     if (!window.confirm(`Execute ${selectedLegs.length} legs × ${lots} lot${lots > 1 ? "s" : ""} = ${totalQty} qty?`)) return;
     setIsExecuting(true);
-    // ✅ FIX 7: /api/trades/execute-basket does not exist on the server.
-    // The option chain basket is for manual ad-hoc orders — post each leg
-    // individually to /api/trades/enter for a full iron condor, OR warn the user
-    // that basket execution requires the standard entry flow.
-    // For now: if exactly 4 legs are selected matching a condor shape, use /enter.
-    // Otherwise alert the user to use the standard entry button.
+    
     try {
       const sells = selectedLegs.filter(l => l.type === "SELL");
       const buys  = selectedLegs.filter(l => l.type === "BUY");
@@ -183,8 +180,6 @@ const OptionChain = ({ onClose }) => {
         return;
       }
 
-      // Use the standard enter endpoint — it will auto-select strikes from the live chain.
-      // This ensures all engine logic (SL tracking, DB write, Telegram alerts) runs correctly.
       const res = await fetch(`${IC_URL}/api/trades/enter`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ index: symbol, quantity: totalQty, mode: "SEMI_AUTO" }),
@@ -210,24 +205,43 @@ const OptionChain = ({ onClose }) => {
         ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#1e293b;border-radius:4px}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+        
+        /* ── Responsive Utilities ── */
+        @media (max-width: 600px) {
+          .header-container { flex-wrap: wrap !important; padding: 8px !important; gap: 8px !important; }
+          .header-left, .header-right { flex: 1 1 auto; justify-content: space-between; }
+          .header-center { width: 100% !important; order: -1; margin-bottom: 4px; }
+          .header-center > div { display: flex; flex-direction: column; gap: 4px; }
+          .lot-bar-container { flex-wrap: wrap !important; gap: 8px !important; }
+          .table-header { grid-template-columns: 1fr 48px 1fr !important; }
+          .strike-col { width: 48px !important; font-size: 10px !important; }
+          .btn-action { width: 26px !important; min-width: 26px !important; font-size: 10px !important; }
+          .price-data-text { font-size: 10px !important; }
+          .hide-mobile { display: none !important; }
+          .basket-summary { flex-direction: column !important; align-items: flex-start !important; gap: 12px !important; }
+          .basket-summary-inner { width: 100% !important; justify-content: space-between !important; }
+          .leg-chip { font-size: 9px !important; padding: 3px 6px !important; }
+        }
       `}</style>
 
       {/* ── Header ── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${C.border}`, padding: "10px 16px", flexShrink: 0, background: C.bgHeader }}>
+      <div className="header-container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${C.border}`, padding: "10px 16px", flexShrink: 0, background: C.bgHeader }}>
 
-        <button onClick={onClose}
-          style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, color: C.textMuted, padding: "7px 14px", borderRadius: 10, fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.12s", fontFamily: C.sans }}
-          onMouseEnter={e => { e.currentTarget.style.color = C.text; e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
-          onMouseLeave={e => { e.currentTarget.style.color = C.textMuted; e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}>
-          <ArrowLeft size={11} /> Back
-        </button>
+        <div className="header-left">
+          <button onClick={onClose}
+            style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, color: C.textMuted, padding: "7px 14px", borderRadius: 10, fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.12s", fontFamily: C.sans }}
+            onMouseEnter={e => { e.currentTarget.style.color = C.text; e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
+            onMouseLeave={e => { e.currentTarget.style.color = C.textMuted; e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}>
+            <ArrowLeft size={11} /> Back
+          </button>
+        </div>
 
         {/* Spot price center */}
-        <div style={{ textAlign: "center" }}>
+        <div className="header-center" style={{ textAlign: "center" }}>
           {spotPrice ? (
-            <>
+            <div>
               <div style={{ fontFamily: C.mono, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-                <span style={{ fontSize: 11, color: C.textFaint, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>{symbol}</span>
+                <span className="hide-mobile" style={{ fontSize: 11, color: C.textFaint, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>{symbol}</span>
                 <span style={{ fontSize: 20, fontWeight: 700, color: marketClosed ? C.amber : C.green, letterSpacing: "-0.03em" }}>
                   ₹{spotPrice?.toLocaleString("en-IN")}
                 </span>
@@ -243,14 +257,14 @@ const OptionChain = ({ onClose }) => {
                 )}
               </div>
               {expiry && <div style={{ fontSize: 9, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 2 }}>Expiry {expiry}</div>}
-            </>
+            </div>
           ) : (
             <div style={{ fontSize: 11, color: C.textFaint }}>—</div>
           )}
         </div>
 
         {/* Symbol + refresh */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="header-right" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ display: "flex", background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: 3, border: `1px solid ${C.border}` }}>
             {["NIFTY", "SENSEX"].map(s => (
               <button key={s} onClick={() => setSymbol(s)}
@@ -269,7 +283,7 @@ const OptionChain = ({ onClose }) => {
       </div>
 
       {/* ── Lot selector bar ── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px", borderBottom: `1px solid rgba(255,255,255,0.04)`, background: C.bgHeader, flexShrink: 0 }}>
+      <div className="lot-bar-container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px", borderBottom: `1px solid rgba(255,255,255,0.04)`, background: C.bgHeader, flexShrink: 0 }}>
         <span style={{ fontSize: 9, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em" }}>
           Lot Size <strong style={{ color: C.textMuted, fontFamily: C.mono }}>{lotSize}</strong>
         </span>
@@ -295,23 +309,23 @@ const OptionChain = ({ onClose }) => {
           <span style={{ fontSize: 9, color: C.textFaint }}>qty</span>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="hide-mobile" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {lastUpdated && <span style={{ fontSize: 9, color: C.textFaint, fontFamily: C.mono }}>{lastUpdated}</span>}
         </div>
       </div>
 
       {/* ── Column headers ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 72px 1fr", padding: "5px 3px", background: C.bgHeader, borderBottom: `1px solid rgba(255,255,255,0.03)`, flexShrink: 0 }}>
+      <div className="table-header" style={{ display: "grid", gridTemplateColumns: "1fr 72px 1fr", padding: "5px 3px", background: C.bgHeader, borderBottom: `1px solid rgba(255,255,255,0.03)`, flexShrink: 0 }}>
         {[["CALL · OI · Vol", "CE"], ["PUT · OI · Vol", "PE"]].map(([label, side], idx) => (
           <div key={side} style={{ display: "flex", alignItems: "center" }}>
-            {idx === 1 && <span style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.1em" }}>BUY</span>}
+            {idx === 1 && <span className="btn-action" style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.1em" }}>BUY</span>}
             <span style={{ flex: 1, textAlign: "center", fontSize: 8, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</span>
-            {idx === 0 && <span style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#fca5a5", textTransform: "uppercase", letterSpacing: "0.1em" }}>SELL</span>}
-            {idx === 0 && <span style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.1em" }}>BUY</span>}
-            {idx === 1 && <span style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#fca5a5", textTransform: "uppercase", letterSpacing: "0.1em" }}>SELL</span>}
+            {idx === 0 && <span className="btn-action" style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#fca5a5", textTransform: "uppercase", letterSpacing: "0.1em" }}>SELL</span>}
+            {idx === 0 && <span className="btn-action" style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.1em" }}>BUY</span>}
+            {idx === 1 && <span className="btn-action" style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#fca5a5", textTransform: "uppercase", letterSpacing: "0.1em" }}>SELL</span>}
           </div>
         ))}
-        <div style={{ textAlign: "center", fontSize: 8, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", alignSelf: "center" }}>STRIKE</div>
+        <div className="strike-col" style={{ textAlign: "center", fontSize: 8, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", alignSelf: "center" }}>STRIKE</div>
       </div>
 
       {/* ── Chain table ── */}
@@ -354,7 +368,7 @@ const OptionChain = ({ onClose }) => {
                           onAddLeg={addLeg} selectedLegs={selectedLegs} />
                       </td>
                       {/* Strike */}
-                      <td style={{ width: 72, textAlign: "center", padding: "4px 2px" }}>
+                      <td className="strike-col" style={{ width: 72, textAlign: "center", padding: "4px 2px" }}>
                         <div style={{ fontFamily: C.mono, fontSize: isATM ? 13 : 11, fontWeight: isATM ? 900 : 500, color: isATM ? C.blue : C.textFaint, letterSpacing: isATM ? "-0.02em" : 0 }}>
                           {row.strike}
                         </div>
@@ -382,7 +396,7 @@ const OptionChain = ({ onClose }) => {
           {/* Leg chips */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
             {selectedLegs.map((leg, i) => (
-              <div key={i} style={{
+              <div className="leg-chip" key={i} style={{
                 display: "flex", alignItems: "center", gap: 5,
                 padding: "4px 8px 4px 10px", borderRadius: 8, fontSize: 10, fontWeight: 700, fontFamily: C.mono,
                 background: leg.type === "BUY" ? "rgba(29,78,216,0.1)" : "rgba(185,28,28,0.1)",
@@ -402,8 +416,8 @@ const OptionChain = ({ onClose }) => {
           </div>
 
           {/* Summary row */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <div style={{ display: "flex", gap: 24 }}>
+          <div className="basket-summary" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div className="basket-summary-inner" style={{ display: "flex", gap: 24 }}>
               <div>
                 <span style={{ fontSize: 8.5, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.09em" }}>Net Premium </span>
                 <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: totalPremium >= 0 ? C.green : C.red }}>
