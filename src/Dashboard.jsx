@@ -935,7 +935,7 @@ const Dashboard = () => {
                     <button
                       key={f}
                       onClick={() => setLogFilter(f)}
-                      className={`px-2.5 py-1 rounded-md text-[8px] font-black transition-all uppercase tracking-widest ${
+                      className={`px-2.5 py-1 cursor-pointer rounded-md text-[8px] font-black transition-all uppercase tracking-widest ${
                         logFilter === f
                           ? f === "TRAFFIC"
                             ? "bg-emerald-500/15 text-emerald-400"
@@ -951,7 +951,7 @@ const Dashboard = () => {
                   {logs.length > 0 && (
                     <button
                       onClick={() => setLogs([])}
-                      className="px-2 py-1 rounded text-[8px] text-slate-600 hover:text-red-400 ml-1 transition-all"
+                      className="px-2 py-1 rounded cursor-pointer text-[8px] text-slate-600 hover:text-red-400 ml-1 transition-all"
                     >
                       Clear
                     </button>
