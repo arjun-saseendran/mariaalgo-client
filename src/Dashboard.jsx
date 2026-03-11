@@ -13,6 +13,7 @@ import {
   BarChart2,
   ChevronRight,
   AlertTriangle,
+  ArrowLeft,
 } from "lucide-react";
 import io from "socket.io-client";
 import OptionChain from "./OptionChain";
@@ -143,6 +144,7 @@ const FeedDot = ({ status }) => {
 /* ── Main Dashboard ───────────────────────────────────────────────────────── */
 const Dashboard = () => {
   const [showOptionChain, setShowOptionChain] = useState(false);
+  const [showHistory, setShowHistory] = useState(false); // New state for history tab
   const [condorData, setCondorData] = useState([]);
   const [trafficData, setTrafficData] = useState({
     signal: "WAITING",
@@ -310,9 +312,120 @@ const Dashboard = () => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
+  /* ── Fullscreen Views ───────────────────────────────────────────────────── */
   if (showOptionChain)
     return <OptionChain onClose={() => setShowOptionChain(false)} />;
 
+  if (showHistory) {
+    return (
+      <div className="min-h-screen bg-[#07070a] text-slate-100 flex flex-col" style={{ fontFamily: "'IBM Plex Mono', 'Fira Code', monospace" }}>
+        {/* History Header */}
+        <header className="relative z-10 flex items-center justify-between px-6 py-3.5 border-b border-slate-800/80 bg-[#08080c]/80 backdrop-blur-sm">
+          <button
+            onClick={() => setShowHistory(false)}
+            className="flex items-center gap-2 bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/60 text-slate-400 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-[0.12em] transition-all cursor-pointer"
+          >
+            <ArrowLeft size={12} /> Back
+          </button>
+          
+          <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-300 flex items-center gap-2">
+            <TrendingUp size={14} className="text-blue-400" /> Trade History
+          </h2>
+          
+          <div className="w-[88px]"></div> {/* Spacer for centering title */}
+        </header>
+
+        {/* History Content */}
+        <div className="flex-1 p-3 sm:p-5 max-w-screen-xl mx-auto w-full">
+          {history.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-20">
+              <TrendingUp size={24} className="text-slate-800" />
+              <span className="text-slate-600 text-[10px] uppercase tracking-[0.15em] font-black">
+                No History Found
+              </span>
+            </div>
+          ) : (
+            <div className="bg-[#09090d] border border-slate-800/70 rounded-2xl overflow-hidden shadow-xl">
+              <SectionHeader
+                icon={TrendingUp}
+                title="All Trades"
+                iconColor="text-blue-400/70"
+                right={
+                  <div className="flex items-center gap-2">
+                    <span className="text-[8px] text-slate-700 uppercase tracking-wider hidden sm:inline">
+                      PnL:
+                    </span>
+                    <Tag variant="success">✓ Actual</Tag>
+                    <Tag variant="warning">~ Est.</Tag>
+                  </div>
+                }
+              />
+              <div className="overflow-x-auto">
+                <table className="w-full text-left whitespace-nowrap">
+                  <thead>
+                    <tr className="text-[8px] uppercase tracking-widest text-slate-700 border-b border-slate-800/60">
+                      <th className="py-3 px-5">Date / Time</th>
+                      <th className="py-3 px-2">Strategy</th>
+                      <th className="py-3 px-2">Symbol</th>
+                      <th className="py-3 px-2">Exit Reason</th>
+                      <th className="py-3 px-2 text-center">Source</th>
+                      <th className="py-3 pr-5 text-right">P&L</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((h, i) => {
+                      const srcMatch = h.notes?.match(
+                        /PnL Source:\s*(FYERS_ACTUAL|ESTIMATED_SPOT)/,
+                      );
+                      const pnlSrc = srcMatch?.[1] || null;
+                      const hPnl = parseFloat(h.pnl);
+                      const dateObj = h.timestamp ? new Date(h.timestamp) : null;
+                      
+                      return (
+                        <tr
+                          key={i}
+                          className="border-b border-slate-800/30 hover:bg-slate-900/20 transition-colors group"
+                        >
+                          <td className="py-3 px-5 text-[9px] text-slate-500 font-mono">
+                            {dateObj ? dateObj.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
+                          </td>
+                          <td className="px-2">
+                            <Tag
+                              variant={
+                                h.strategy === "IRON_CONDOR" ? "warning" : "success"
+                              }
+                            >
+                              {h.strategy === "IRON_CONDOR" ? "IC" : "TL"}
+                            </Tag>
+                          </td>
+                          <td className="px-2 font-mono text-[10px] text-slate-400 group-hover:text-slate-300 transition-colors">
+                            {h.symbol}
+                          </td>
+                          <td className="px-2 text-[10px] text-slate-600">
+                            {h.exitReason?.replace(/_/g, " ")}
+                          </td>
+                          <td className="px-2 text-center">
+                            <PnlSourcePill source={pnlSrc} />
+                          </td>
+                          <td
+                            className={`pr-5 text-right font-black text-sm font-mono ${hPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                          >
+                            {hPnl >= 0 ? "+" : ""}₹{hPnl.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Calculations ───────────────────────────────────────────────────────── */
   const pnl = parseFloat(trafficData.livePnL);
   const filteredLogs =
     logFilter === "ALL" ? logs : logs.filter((l) => l.strategy === logFilter);
@@ -406,12 +519,21 @@ const Dashboard = () => {
               })}
             </span>
           )}
+          
+          <button
+            onClick={() => setShowHistory(true)}
+            className="flex items-center gap-2 bg-blue-600/8 cursor-pointer hover:bg-blue-600/15 border border-blue-500/20 hover:border-blue-500/40 text-blue-400 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-[0.12em] transition-all"
+          >
+            <TrendingUp size={12} />
+            <span className="hidden sm:inline">History</span>
+          </button>
+
           <button
             onClick={() => setShowOptionChain(true)}
             className="flex items-center gap-2 bg-blue-600/8 cursor-pointer hover:bg-blue-600/15 border border-blue-500/20 hover:border-blue-500/40 text-blue-400 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-[0.12em] transition-all"
           >
             <Layers size={12} />
-            Chain
+            <span className="hidden sm:inline">Chain</span>
           </button>
         </div>
       </header>
@@ -1044,78 +1166,6 @@ const Dashboard = () => {
             </div>
           </div>
         </div>
-
-        {/* ── Trade History ─────────────────────────────────────────────── */}
-        {history.length > 0 && (
-          <div className="bg-[#09090d] border border-slate-800/70 rounded-2xl overflow-hidden shadow-xl">
-            <SectionHeader
-              icon={TrendingUp}
-              title="Trade History"
-              iconColor="text-blue-400/70"
-              right={
-                <div className="flex items-center gap-2">
-                  <span className="text-[8px] text-slate-700 uppercase tracking-wider hidden sm:inline">
-                    PnL:
-                  </span>
-                  <Tag variant="success">✓ Actual</Tag>
-                  <Tag variant="warning">~ Est.</Tag>
-                </div>
-              }
-            />
-            <div className="overflow-x-auto">
-              <table className="w-full text-left whitespace-nowrap">
-                <thead>
-                  <tr className="text-[8px] uppercase tracking-widest text-slate-700 border-b border-slate-800/60">
-                    <th className="py-2.5 px-5">Strategy</th>
-                    <th className="py-2.5 px-2">Symbol</th>
-                    <th className="py-2.5 px-2">Exit Reason</th>
-                    <th className="py-2.5 px-2 text-center">Source</th>
-                    <th className="py-2.5 pr-5 text-right">P&L</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((h, i) => {
-                    const srcMatch = h.notes?.match(
-                      /PnL Source:\s*(FYERS_ACTUAL|ESTIMATED_SPOT)/,
-                    );
-                    const pnlSrc = srcMatch?.[1] || null;
-                    const hPnl = parseFloat(h.pnl);
-                    return (
-                      <tr
-                        key={i}
-                        className="border-b border-slate-800/30 hover:bg-slate-900/20 transition-colors group"
-                      >
-                        <td className="py-3 px-5">
-                          <Tag
-                            variant={
-                              h.strategy === "IRON_CONDOR" ? "warning" : "success"
-                            }
-                          >
-                            {h.strategy === "IRON_CONDOR" ? "IC" : "TL"}
-                          </Tag>
-                        </td>
-                        <td className="px-2 font-mono text-[10px] text-slate-400 group-hover:text-slate-300 transition-colors">
-                          {h.symbol}
-                        </td>
-                        <td className="px-2 text-[10px] text-slate-600">
-                          {h.exitReason?.replace(/_/g, " ")}
-                        </td>
-                        <td className="px-2 text-center">
-                          <PnlSourcePill source={pnlSrc} />
-                        </td>
-                        <td
-                          className={`pr-5 text-right font-black text-sm font-mono ${hPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}
-                        >
-                          {hPnl >= 0 ? "+" : ""}₹{hPnl.toFixed(2)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
