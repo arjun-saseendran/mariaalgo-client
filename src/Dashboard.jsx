@@ -164,10 +164,6 @@ const Dashboard = () => {
   const [autoMode, setAutoMode] = useState(false);
   const [autoStatus, setAutoStatus] = useState(null);
   const [autoToggling, setAutoToggling] = useState(false);
-  // ✅ FIX: autoArmed persists the user's intent across 5s polls.
-  // entryDone=false means "not yet entered" — it doesn't mean "user turned it off".
-  // Without this, the toggle flips back OFF on the next poll whenever market is
-  // closed or it's not entry day (Sunday, holiday, wrong weekday).
   const autoArmedRef = useRef(false);
   const logsEndRef = useRef(null);
 
@@ -176,15 +172,13 @@ const Dashboard = () => {
     const fetchAll = async () => {
       try {
         const [tRes, cRes, hRes, aRes] = await Promise.all([
-          fetch(`${TL_URL}/api/traffic/status`), // Traffic Light server
-          fetch(`${IC_URL}/api/condor/positions`), // Iron Condor server
-          fetch(`${IC_URL}/api/history`), // Iron Condor server
-          fetch(`${IC_URL}/api/auto-condor/status`), // Iron Condor server
+          fetch(`${TL_URL}/api/traffic/status`),
+          fetch(`${IC_URL}/api/condor/positions`),
+          fetch(`${IC_URL}/api/history`),
+          fetch(`${IC_URL}/api/auto-condor/status`),
         ]);
         if (tRes.ok) setTrafficData(await tRes.json());
         if (cRes.ok) {
-          // ✅ FIX 1: /api/condor/positions returns a single object (or null), not an array.
-          // Wrap in array so the rest of the render logic (condorData[0], condorData.length) still works.
           const raw = await cRes.json();
           const cData = raw ? [raw] : [];
           setCondorData(cData);
@@ -222,7 +216,6 @@ const Dashboard = () => {
         if (hRes.ok) setHistory(await hRes.json());
         if (aRes.ok) {
           const d = await aRes.json();
-          // ✅ armed is now a real server-side flag — sync directly from it
           if (!autoArmedRef.current) {
             setAutoMode(d.armed === true);
           }
@@ -313,8 +306,6 @@ const Dashboard = () => {
     return null;
   };
 
-  // ✅ FIX 3: /api/auto-condor has no activate/deactivate endpoints.
-  // Use /reset to reset day state (clears entryDone so auto-entry can re-run).
   const toggleAutoMode = async () => {
     setAutoToggling(true);
     try {
@@ -325,16 +316,13 @@ const Dashboard = () => {
         if (res.ok) {
           autoArmedRef.current = false;
           setAutoMode(false);
-          // ✅ Clear condor logs so stale "armed but waiting" messages don't linger
           setLogs((prev) => prev.filter((l) => l.strategy !== "CONDOR"));
         }
       } else {
-        // Trigger immediate entry check (will no-op on holidays/wrong day — that's correct)
         const res = await fetch(`${IC_URL}/api/auto-condor/trigger`, {
           method: "POST",
         });
         if (res.ok) {
-          // Arm the toggle — stays ON even if today is not entry day
           autoArmedRef.current = true;
           setAutoMode(true);
         }
@@ -347,7 +335,6 @@ const Dashboard = () => {
 
   /* ── Condor row values ──────────────────────────────────────────────────── */
   const row = condorData[0];
-  // ✅ FIX 4: API returns `pnl`, not `totalPnL`
   const condorPnlVal = row ? parseFloat(row.pnl) : 0;
   const condorPnlPos = condorPnlVal >= 0;
 
@@ -493,14 +480,13 @@ const Dashboard = () => {
               <span
                 className={`font-black text-lg font-mono ${condorPnlPos ? "text-emerald-400" : "text-red-400"}`}
               >
-                {/* ✅ FIX 4: API field is `pnl` not `totalPnL` */}₹
-                {condorData[0].pnl}
+                ₹{condorData[0].pnl}
               </span>
             </div>
           ) : (
             <div className="p-4">
               {condorData.map((row, i) => {
-                const rowPnl = parseFloat(row.pnl); // ✅ FIX 4: was row.totalPnL
+                const rowPnl = parseFloat(row.pnl);
                 const pnlPos = rowPnl >= 0;
                 const callLive = parseFloat(row.call.current);
                 const putLive = parseFloat(row.put.current);
@@ -541,7 +527,6 @@ const Dashboard = () => {
                             ₹{row.buffer}
                           </div>
                         </div>
-                        {/* ✅ FIX 4: API field is `slCount` not `spreadSLCount` */}
                         {row.slCount > 0 && (
                           <>
                             <div className="w-px h-8 bg-slate-800" />
@@ -563,7 +548,6 @@ const Dashboard = () => {
                         <div
                           className={`text-2xl font-black font-mono ${feedStatus === "error" ? "text-slate-700" : pnlPos ? "text-emerald-400" : "text-red-400"}`}
                         >
-                          {/* ✅ FIX 4: API field is `pnl` not `totalPnL` */}
                           {feedStatus === "error" ? "—" : `₹${row.pnl}`}
                         </div>
                       </div>
@@ -616,7 +600,6 @@ const Dashboard = () => {
                         <div>
                           <div className="flex justify-between text-[8px] text-slate-600 mb-1">
                             <span>Decay</span>
-                            {/* ✅ FIX 4: API field is `ff3x` not `firefightLevel` */}
                             <span className="text-emerald-600">
                               FF ₹{row.call.ff3x}
                             </span>
@@ -685,7 +668,6 @@ const Dashboard = () => {
                         <div>
                           <div className="flex justify-between text-[8px] text-slate-600 mb-1">
                             <span>Decay</span>
-                            {/* ✅ FIX 4: API field is `ff3x` not `firefightLevel` */}
                             <span className="text-emerald-600">
                               FF ₹{row.put.ff3x}
                             </span>
@@ -708,7 +690,7 @@ const Dashboard = () => {
                       </div>
                     </div>
 
-                    {/* ✅ FIX 6: Show firefight/butterfly pending banners — API sends these flags but UI never rendered them */}
+                    {/* Firefight pending banner */}
                     {row.firefightPending && (
                       <div className="flex items-center gap-2 bg-amber-500/8 border border-amber-500/25 rounded-lg px-3 py-2">
                         <Zap size={11} className="text-amber-400" />
@@ -716,7 +698,6 @@ const Dashboard = () => {
                           Firefight Pending — {row.firefightSide?.toUpperCase()}{" "}
                           side
                         </span>
-                        {/* ✅ FIX: added action button — semi-auto user was seeing the alert with no way to act */}
                         <button
                           onClick={async () => {
                             if (!window.confirm("Execute firefight now?"))
@@ -737,6 +718,7 @@ const Dashboard = () => {
                         </button>
                       </div>
                     )}
+                    {/* Butterfly pending banner */}
                     {row.butterflyPending && !row.isButterfly && (
                       <div className="flex items-center gap-2 bg-purple-500/8 border border-purple-500/25 rounded-lg px-3 py-2">
                         <Activity size={11} className="text-purple-400" />
@@ -744,7 +726,6 @@ const Dashboard = () => {
                           Butterfly Conversion Pending — Sell leg at ATM + SL
                           hit
                         </span>
-                        {/* ✅ FIX: added action button — semi-auto user was seeing the alert with no way to act */}
                         <button
                           onClick={async () => {
                             if (
@@ -767,7 +748,7 @@ const Dashboard = () => {
                         </button>
                       </div>
                     )}
-                    {/* Butterfly SL badge */}
+                    {/* Butterfly active badge */}
                     {row.isButterfly && (
                       <div className="flex items-center gap-2 bg-purple-500/8 border border-purple-500/20 rounded-lg px-3 py-2">
                         <Activity size={11} className="text-purple-400" />
@@ -795,17 +776,21 @@ const Dashboard = () => {
               title="Traffic Light"
               iconColor="text-emerald-500/80"
               right={
-                <Tag
-                  variant={
-                    trafficData.signal === "ACTIVE"
-                      ? "success"
-                      : trafficData.signal === "CLOSED"
-                        ? "neutral"
-                        : "warning"
-                  }
-                >
-                  {trafficData.signal}
-                </Tag>
+                <div className="flex items-center gap-2">
+                  {/* ── GREEN DOT: uses socket connected state for TL feed ── */}
+                  <FeedDot status={connected ? "ok" : "error"} />
+                  <Tag
+                    variant={
+                      trafficData.signal === "ACTIVE"
+                        ? "success"
+                        : trafficData.signal === "CLOSED"
+                          ? "neutral"
+                          : "warning"
+                    }
+                  >
+                    {trafficData.signal}
+                  </Tag>
+                </div>
               }
             />
 
