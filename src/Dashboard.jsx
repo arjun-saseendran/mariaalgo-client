@@ -175,7 +175,7 @@ const Dashboard = () => {
         const [tRes, cRes, hRes, aRes] = await Promise.all([
           fetch(`${TL_URL}/api/traffic/status`),
           fetch(`${IC_URL}/api/condor/positions`),
-          fetch(`${IC_URL}/api/history`),
+          fetch(`${TL_URL}/api/history`),  // ✅ FIX: Traffic Light history from TL server (port 3001)
           fetch(`${IC_URL}/api/auto-condor/status`),
         ]);
         if (tRes.ok) setTrafficData(await tRes.json());
