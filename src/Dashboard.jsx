@@ -277,7 +277,7 @@ const Dashboard = () => {
           )}
           <button
             onClick={() => setShowOptionChain(true)}
-            className="flex items-center gap-2 bg-blue-600/8 hover:bg-blue-600/15 border border-blue-500/20 hover:border-blue-500/40 text-blue-400 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-[0.12em] transition-all"
+            className="flex items-center gap-2 bg-blue-600/8 cursor-pointer hover:bg-blue-600/15 border border-blue-500/20 hover:border-blue-500/40 text-blue-400 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-[0.12em] transition-all"
           >
             <Layers size={12} />
             Chain
