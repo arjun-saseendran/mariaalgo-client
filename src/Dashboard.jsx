@@ -28,7 +28,8 @@ const TL_URL = import.meta.env.VITE_TRAFFIC_URL
   ? import.meta.env.VITE_TRAFFIC_URL
   : "https://mariaalgo.online/tl";
 
-const socket = io(IC_URL, { withCredentials: true });
+const socket    = io(IC_URL, { withCredentials: true });  // Iron Condor (port 3002)
+const tlSocket  = io(TL_URL, { withCredentials: true });  // Traffic Light (port 3001)
 
 const LOG_STYLE = {
   success: "text-emerald-400",
@@ -269,6 +270,17 @@ const Dashboard = () => {
     socket.on("trade_log", (entry) =>
       setLogs((prev) => [...prev, entry].slice(-200)),
     );
+    // ✅ FIX: also listen to Traffic Light socket for TRAFFIC logs and market ticks
+    tlSocket.on("trade_log", (entry) =>
+      setLogs((prev) => [...prev, entry].slice(-200)),
+    );
+    tlSocket.on("market_tick", (data) => {
+      setTrafficData((prev) => {
+        if (prev.signal !== "ACTIVE" || !prev.direction || !prev.entryPrice || prev._optionLtpReceived) return prev;
+        const pts = prev.direction === "CE" ? data.price - prev.entryPrice : prev.entryPrice - data.price;
+        return { ...prev, livePnL: (pts * 65).toFixed(2), pnlSource: "spot" };
+      });
+    });
     return () => {
       [
         "connect",
@@ -279,6 +291,7 @@ const Dashboard = () => {
         "option_tick",
         "trade_log",
       ].forEach((e) => socket.off(e));
+      tlSocket.off("trade_log");
     };
   }, []);
 
