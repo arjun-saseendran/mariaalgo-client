@@ -126,8 +126,8 @@ const FeedDot = ({ status }) => {
   const cfg = {
     ok: { dot: "bg-emerald-500", text: "text-emerald-500", label: "Live" },
     error: { dot: "bg-red-500", text: "text-red-500", label: "Down" },
-    connecting: { dot: "bg-amber-500", text: "text-amber-500", label: "…" },
-  }[status] || { dot: "bg-amber-500", text: "text-amber-500", label: "…" }; // Default to connecting instead of grey dash
+    connecting: { dot: "bg-amber-500", text: "text-amber-500", label: "Wait" },
+  }[status] || { dot: "bg-amber-500", text: "text-amber-500", label: "Wait" }; 
   return (
     <div className="flex items-center gap-1.5">
       <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${cfg.dot}`} />
@@ -160,9 +160,8 @@ const Dashboard = () => {
   const [logFilter, setLogFilter] = useState("ALL");
   const [lastUpdate, setLastUpdate] = useState(null);
   
-  // Connection states
-  const [icConnected, setIcConnected] = useState(socket.connected);
-  const [tlConnected, setTlConnected] = useState(tlSocket.connected);
+  // Single, unified connection state
+  const [connected, setConnected] = useState(socket.connected);
   const [feedStatus, setFeedStatus] = useState("connecting"); // kite specific
   const [feedError, setFeedError] = useState(null);
   
@@ -236,15 +235,13 @@ const Dashboard = () => {
 
   /* ── Socket ────────────────────────────────────────────────────────────── */
   useEffect(() => {
-    // Initial sync just in case
-    setIcConnected(socket.connected);
-    setTlConnected(tlSocket.connected);
+    setConnected(socket.connected);
 
-    // Iron Condor Sockets
-    const onIcConnect = () => setIcConnected(true);
-    const onIcDisconnect = () => setIcConnected(false);
-    socket.on("connect", onIcConnect);
-    socket.on("disconnect", onIcDisconnect);
+    // Main App Connection state driven by primary server
+    const onConnect = () => setConnected(true);
+    const onDisconnect = () => setConnected(false);
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
     
     socket.on("upstox_status", ({ status, message }) => {
       setFeedStatus(status);
@@ -283,12 +280,7 @@ const Dashboard = () => {
       setLogs((prev) => [...prev, entry].slice(-200)),
     );
 
-    // Traffic Light Sockets
-    const onTlConnect = () => setTlConnected(true);
-    const onTlDisconnect = () => setTlConnected(false);
-    tlSocket.on("connect", onTlConnect);
-    tlSocket.on("disconnect", onTlDisconnect);
-    
+    // Traffic Light specific log streams
     tlSocket.on("trade_log", (entry) =>
       setLogs((prev) => [...prev, entry].slice(-200)),
     );
@@ -301,16 +293,14 @@ const Dashboard = () => {
     });
 
     return () => {
-      socket.off("connect", onIcConnect);
-      socket.off("disconnect", onIcDisconnect);
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
       socket.off("upstox_status");
       socket.off("auto_condor_tick");
       socket.off("market_tick");
       socket.off("option_tick");
       socket.off("trade_log");
       
-      tlSocket.off("connect", onTlConnect);
-      tlSocket.off("disconnect", onTlDisconnect);
       tlSocket.off("trade_log");
       tlSocket.off("market_tick");
     };
@@ -367,14 +357,12 @@ const Dashboard = () => {
     }
   };
 
-  /* ── Condor row values ──────────────────────────────────────────────────── */
+  /* ── Status Signals for UI Matching ─────────────────────────────────────── */
+  const icSignal = condorData.length === 0 ? "WAITING" : condorData[0].status === "COMPLETED" ? "CLOSED" : "ACTIVE";
+  
   const row = condorData[0];
   const condorPnlVal = row ? parseFloat(row.pnl) : 0;
   const condorPnlPos = condorPnlVal >= 0;
-  
-  // Calculate final statuses for FeedDots
-  const icFinalStatus = feedStatus === "error" ? "error" : (icConnected ? "ok" : "connecting");
-  const tlFinalStatus = tlConnected ? "ok" : "connecting";
 
   return (
     <div
@@ -402,9 +390,9 @@ const Dashboard = () => {
             </h1>
             <div className="flex items-center gap-2 mt-0.5">
               <span
-                className={`text-[8px] font-bold uppercase tracking-widest ${icConnected || tlConnected ? "text-emerald-600" : "text-amber-500"}`}
+                className={`text-[8px] font-bold uppercase tracking-widest ${connected ? "text-emerald-600" : "text-amber-500"}`}
               >
-                {icConnected || tlConnected ? "● Connected" : "○ Connecting…"}
+                {connected ? "● Connected" : "○ Connecting…"}
               </span>
             </div>
           </div>
@@ -447,7 +435,7 @@ const Dashboard = () => {
             </span>
           </div>
         )}
-        {feedStatus === "connecting" && icConnected && (
+        {feedStatus === "connecting" && connected && (
           <div className="flex items-center gap-3 bg-amber-500/6 border border-amber-500/15 rounded-xl px-4 py-3">
             <Clock size={12} className="text-amber-500 shrink-0" />
             <span className="text-amber-500/80 text-[10px] font-bold">
@@ -463,7 +451,18 @@ const Dashboard = () => {
             title="Iron Condor"
             iconColor="text-amber-500/80"
             right={
-              <>
+              <div className="flex items-center gap-2">
+                <Tag
+                  variant={
+                    icSignal === "ACTIVE"
+                      ? "success"
+                      : icSignal === "CLOSED"
+                        ? "neutral"
+                        : "warning"
+                  }
+                >
+                  {icSignal}
+                </Tag>
                 <button
                   onClick={toggleAutoMode}
                   disabled={autoToggling}
@@ -493,8 +492,8 @@ const Dashboard = () => {
                     <span className="ml-1 text-amber-400/80">Hold</span>
                   )}
                 </button>
-                <FeedDot status={icFinalStatus} />
-              </>
+                <FeedDot status={connected ? (feedStatus === "error" ? "error" : "ok") : "connecting"} />
+              </div>
             }
           />
 
@@ -818,7 +817,7 @@ const Dashboard = () => {
               title="Traffic Light"
               iconColor="text-emerald-500/80"
               right={
-                <>
+                <div className="flex items-center gap-2">
                   <Tag
                     variant={
                       trafficData.signal === "ACTIVE"
@@ -830,8 +829,8 @@ const Dashboard = () => {
                   >
                     {trafficData.signal}
                   </Tag>
-                  <FeedDot status={tlFinalStatus} />
-                </>
+                  <FeedDot status={connected ? "ok" : "connecting"} />
+                </div>
               }
             />
 
@@ -954,7 +953,7 @@ const Dashboard = () => {
             <SectionHeader
               icon={BarChart2}
               title="Live Logs"
-              iconColor={icConnected || tlConnected ? "text-emerald-500" : "text-amber-500"}
+              iconColor={connected ? "text-emerald-500" : "text-amber-500"}
               right={
                 <div className="flex items-center gap-1">
                   {["ALL", "TRAFFIC", "CONDOR"].map((f) => (
