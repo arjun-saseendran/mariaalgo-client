@@ -506,8 +506,8 @@ const Dashboard = () => {
                 const callEntry = parseFloat(row.call.entry);
                 const putEntry = parseFloat(row.put.entry);
                 const callPct =
-                  callEntry > 0 ? (callLive / callEntry) * 100 : 0;
-                const putPct = putEntry > 0 ? (putLive / putEntry) * 100 : 0;
+                  callEntry > 0 && callLive > 0 ? (callLive / callEntry) * 100 : 100;
+                const putPct = putEntry > 0 && putLive > 0 ? (putLive / putEntry) * 100 : 100;
 
                 return (
                   <div key={i} className="space-y-3">
@@ -595,7 +595,7 @@ const Dashboard = () => {
                             <div
                               className={`font-mono text-xs font-bold ${feedStatus === "error" ? "text-slate-700" : ""}`}
                             >
-                              {feedStatus === "error"
+                              {feedStatus === "error" || !parseFloat(row.call.current)
                                 ? "—"
                                 : `₹${row.call.current}`}
                             </div>
@@ -664,7 +664,7 @@ const Dashboard = () => {
                             <div
                               className={`font-mono text-xs font-bold ${feedStatus === "error" ? "text-slate-700" : ""}`}
                             >
-                              {feedStatus === "error"
+                              {feedStatus === "error" || !parseFloat(row.put.current)
                                 ? "—"
                                 : `₹${row.put.current}`}
                             </div>
