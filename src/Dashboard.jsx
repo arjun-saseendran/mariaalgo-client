@@ -511,19 +511,31 @@ const Dashboard = () => {
     setAutoToggling(true);
     try {
       if (autoMode) {
-        const res = await fetch(`${IC_URL}/api/auto-condor/reset`, {
-          method: "POST",
-        });
-        if (res.ok) {
+        // Turn OFF — reset auto condor + switch active trade back to SEMI_AUTO
+        const [r1, r2] = await Promise.all([
+          fetch(`${IC_URL}/api/auto-condor/reset`, { method: "POST" }),
+          fetch(`${IC_URL}/api/trades/mode`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode: "SEMI_AUTO" }),
+          }),
+        ]);
+        if (r1.ok) {
           autoArmedRef.current = false;
           setAutoMode(false);
           setLogs((prev) => prev.filter((l) => l.strategy !== "CONDOR"));
         }
       } else {
-        const res = await fetch(`${IC_URL}/api/auto-condor/trigger`, {
-          method: "POST",
-        });
-        if (res.ok) {
+        // Turn ON — arm auto condor + switch active trade to FULL_AUTO
+        const [r1, r2] = await Promise.all([
+          fetch(`${IC_URL}/api/auto-condor/trigger`, { method: "POST" }),
+          fetch(`${IC_URL}/api/trades/mode`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode: "FULL_AUTO" }),
+          }),
+        ]);
+        if (r1.ok) {
           autoArmedRef.current = true;
           setAutoMode(true);
         }
