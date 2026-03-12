@@ -1065,7 +1065,7 @@ const Dashboard = () => {
                           : "info"
                     }
                   >
-                    {trafficData.signal === "WAITING" ? "SCANNING" : trafficData.signal}
+                    {trafficData.signal === "WAITING" ? (engineStatus.tl?.pm2 === "online" ? "SCANNING" : "OFFLINE") : trafficData.signal}
                   </Tag>
                   <FeedDot status={connected ? "ok" : "connecting"} />
                   <EngineControls engine="tl" status={engineStatus.tl} action={engineAction.tl} onControl={engineControl} />
@@ -1144,10 +1144,12 @@ const Dashboard = () => {
                     className={`text-6xl font-black tracking-tighter ${
                       trafficData.signal === "CLOSED"
                         ? "text-slate-700"
-                        : "text-amber-500/30"
+                        : trafficData.signal === "WAITING" && engineStatus.tl?.pm2 !== "online"
+                          ? "text-red-500/30"
+                          : "text-blue-500/30"
                     }`}
                   >
-                    {trafficData.signal}
+                    {trafficData.signal === "WAITING" ? (engineStatus.tl?.pm2 === "online" ? "SCANNING" : "OFFLINE") : trafficData.signal}
                   </div>
                   {trafficData.breakoutHigh > 0 && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-md">
