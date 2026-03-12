@@ -683,7 +683,7 @@ const Dashboard = () => {
                         : "neutral"
                   }
                 >
-                  {icSignal === "WAITING" ? "IDLE" : icSignal}
+                  {icSignal === "WAITING" ? "NO POSITION" : icSignal}
                 </Tag>
                 <button
                   onClick={toggleAutoMode}
