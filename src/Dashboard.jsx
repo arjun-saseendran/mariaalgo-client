@@ -537,9 +537,7 @@ const Dashboard = () => {
   const engineControl = async (engine, action) => {
     const label = engine === "ic" ? "Iron Condor" : "Traffic Light";
     const broker = engine === "ic" ? "Kite" : "Fyers";
-    if (action === "stop") {
-      if (!window.confirm(`⚠️ Stop ${label} engine?\n\nPm2 process will be killed immediately.\nOpen positions will NOT be closed — check ${broker} manually.`)) return;
-    }
+
     setEngineAction((prev) => ({ ...prev, [engine]: action }));
     try {
       const res  = await fetch(`${CTRL_URL}/control/${engine}/${action}`, { method: "POST" });
@@ -954,8 +952,7 @@ const Dashboard = () => {
                         </span>
                         <button
                           onClick={async () => {
-                            if (!window.confirm("Execute firefight now?"))
-                              return;
+
                             const res = await fetch(
                               `${IC_URL}/api/trades/firefight`,
                               { method: "POST" },
@@ -1001,10 +998,7 @@ const Dashboard = () => {
                         </span>
                         <button
                           onClick={async () => {
-                            if (
-                              !window.confirm("Convert to Iron Butterfly now?")
-                            )
-                              return;
+
                             const res = await fetch(
                               `${IC_URL}/api/trades/butterfly`,
                               { method: "POST" },
