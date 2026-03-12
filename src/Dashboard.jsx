@@ -537,7 +537,9 @@ const Dashboard = () => {
   const engineControl = async (engine, action) => {
     const label = engine === "ic" ? "Iron Condor" : "Traffic Light";
     const broker = engine === "ic" ? "Kite" : "Fyers";
-
+    if (action === "stop") {
+      if (!window.confirm(`⚠️ Stop ${label} engine?\n\nPm2 process will be killed immediately.\nOpen positions will NOT be closed — check ${broker} manually.`)) return;
+    }
     setEngineAction((prev) => ({ ...prev, [engine]: action }));
     try {
       const res  = await fetch(`${CTRL_URL}/control/${engine}/${action}`, { method: "POST" });
@@ -952,7 +954,8 @@ const Dashboard = () => {
                         </span>
                         <button
                           onClick={async () => {
-
+                            if (!window.confirm("Execute firefight now?"))
+                              return;
                             const res = await fetch(
                               `${IC_URL}/api/trades/firefight`,
                               { method: "POST" },
@@ -969,6 +972,25 @@ const Dashboard = () => {
                         </button>
                       </div>
                     )}
+                    {/* Opposite side pending banner (one-side → iron condor) */}
+                    {row.oppositeSidePending && (
+                      <div className="flex items-center gap-2 bg-blue-500/8 border border-blue-500/25 rounded-lg px-3 py-2">
+                        <Zap size={11} className="text-blue-400" />
+                        <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">
+                          3x Loss · Enter {row.oppositeSide?.toUpperCase()} side → Iron Condor
+                        </span>
+                        <button
+                          onClick={async () => {
+                            const res = await fetch(`${IC_URL}/api/trades/enter-opposite`, { method: "POST" });
+                            if (!res.ok) alert("Failed: " + (await res.json().catch(() => ({}))).error);
+                          }}
+                          className="ml-auto px-3 py-1 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-400 text-[9px] font-black uppercase tracking-widest rounded-md transition-all"
+                        >
+                          Enter ▶
+                        </button>
+                      </div>
+                    )}
+
                     {/* Butterfly pending banner */}
                     {row.butterflyPending && !row.isButterfly && (
                       <div className="flex items-center gap-2 bg-purple-500/8 border border-purple-500/25 rounded-lg px-3 py-2">
@@ -979,7 +1001,10 @@ const Dashboard = () => {
                         </span>
                         <button
                           onClick={async () => {
-
+                            if (
+                              !window.confirm("Convert to Iron Butterfly now?")
+                            )
+                              return;
                             const res = await fetch(
                               `${IC_URL}/api/trades/butterfly`,
                               { method: "POST" },
