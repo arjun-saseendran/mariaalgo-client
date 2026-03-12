@@ -724,10 +724,10 @@ const Dashboard = () => {
             <div className="flex flex-col items-center justify-center gap-2 py-10">
               <Shield size={18} className="text-slate-700" />
               <span className="text-slate-600 text-[10px] uppercase tracking-[0.15em] font-black">
-                Scanning for Setup
+                {engineStatus.ic?.pm2 === "online" ? "No Position" : "Engine Offline"}
               </span>
               <span className="text-slate-700 text-[9px]">
-                No active position — strategy idle
+                {engineStatus.ic?.pm2 === "online" ? "No active position — strategy idle" : "Start engine to begin monitoring"}
               </span>
             </div>
           ) : condorData[0].status === "COMPLETED" ? (
@@ -1056,17 +1056,19 @@ const Dashboard = () => {
               iconColor="text-emerald-500/80"
               right={
                 <div className="flex items-center gap-2">
-                  <Tag
-                    variant={
-                      trafficData.signal === "ACTIVE"
-                        ? "success"
-                        : trafficData.signal === "CLOSED"
-                          ? "neutral"
-                          : "info"
-                    }
-                  >
-                    {trafficData.signal === "WAITING" ? (engineStatus.tl?.pm2 === "online" ? "SCANNING" : "OFFLINE") : trafficData.signal}
-                  </Tag>
+                  {engineStatus.tl?.pm2 === "online" || !engineStatus.tl ? (
+                    <Tag
+                      variant={
+                        trafficData.signal === "ACTIVE"
+                          ? "success"
+                          : trafficData.signal === "CLOSED"
+                            ? "neutral"
+                            : "info"
+                      }
+                    >
+                      {trafficData.signal === "WAITING" ? "SCANNING" : trafficData.signal}
+                    </Tag>
+                  ) : null}
                   <FeedDot status={connected ? "ok" : "connecting"} />
                   <EngineControls engine="tl" status={engineStatus.tl} action={engineAction.tl} onControl={engineControl} />
                 </div>
@@ -1177,6 +1179,8 @@ const Dashboard = () => {
                           </span>
                         )}
                       </>
+                    ) : engineStatus.tl?.pm2 !== "online" ? (
+                      "Engine offline"
                     ) : (
                       "Waiting for range lock…"
                     )}
