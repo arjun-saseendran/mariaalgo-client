@@ -29,6 +29,11 @@ const TL_URL = import.meta.env.VITE_TRAFFIC_URL
   ? import.meta.env.VITE_TRAFFIC_URL
   : "https://mariaalgo.online/tl";
 
+// Control server (port 3003) — always running, manages start/stop of both engines
+const CTRL_URL = import.meta.env.VITE_CONTROL_URL
+  ? import.meta.env.VITE_CONTROL_URL
+  : "https://mariaalgo.online/ctrl";
+
 const socket    = io(IC_URL, { withCredentials: true });  // Iron Condor (port 3002)
 const tlSocket  = io(TL_URL, { withCredentials: true });  // Traffic Light (port 3001)
 
@@ -141,6 +146,58 @@ const FeedDot = ({ status }) => {
   );
 };
 
+/* ── Engine Controls Component ───────────────────────────────────────────── */
+const EngineControls = ({ engine, status, action, onControl }) => {
+  const isOnline  = status?.pm2 === "online";
+  const isBusy    = action !== null;
+  const noCtrl    = !status; // control server not reachable
+
+  if (noCtrl) {
+    // Control server down — show plain stop button (legacy fallback)
+    return null;
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      {/* Status dot */}
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
+      <span className={`text-[8px] font-black uppercase tracking-widest mr-1 ${isOnline ? "text-emerald-600" : "text-red-600"}`}>
+        {isOnline ? "Online" : "Offline"}
+      </span>
+
+      {isOnline ? (
+        <>
+          <button
+            onClick={() => onControl(engine, "restart")}
+            disabled={isBusy}
+            title="Restart engine"
+            className={`px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all bg-amber-500/10 border-amber-500/25 text-amber-400 hover:bg-amber-500/20 ${isBusy ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+          >
+            {action === "restart" ? "…" : "↺"}
+          </button>
+          <button
+            onClick={() => onControl(engine, "stop")}
+            disabled={isBusy}
+            title="Stop engine"
+            className={`px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all bg-red-500/10 border-red-500/25 text-red-400 hover:bg-red-500/20 ${isBusy ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+          >
+            {action === "stop" ? "…" : "■"}
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={() => onControl(engine, "start")}
+          disabled={isBusy}
+          title="Start engine"
+          className={`px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all bg-emerald-500/10 border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/20 ${isBusy ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+        >
+          {action === "start" ? "…" : "▶ Start"}
+        </button>
+      )}
+    </div>
+  );
+};
+
 /* ── Main Dashboard ───────────────────────────────────────────────────────── */
 const Dashboard = () => {
   const [showOptionChain, setShowOptionChain] = useState(false);
@@ -172,16 +229,19 @@ const Dashboard = () => {
   const [autoToggling, setAutoToggling] = useState(false);
   const autoArmedRef = useRef(false);
   const logsEndRef = useRef(null);
+  const [engineStatus, setEngineStatus] = useState({ ic: null, tl: null }); // from control server
+  const [engineAction, setEngineAction] = useState({ ic: null, tl: null }); // "starting"|"stopping"|"restarting"|null
 
   /* ── Data polling ──────────────────────────────────────────────────────── */
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [tRes, cRes, hRes, aRes] = await Promise.all([
+        const [tRes, cRes, hRes, aRes, ctrlRes] = await Promise.all([
           fetch(`${TL_URL}/api/traffic/status`),
           fetch(`${IC_URL}/api/condor/positions`),
           fetch(`${TL_URL}/api/history`),
           fetch(`${IC_URL}/api/auto-condor/status`),
+          fetch(`${CTRL_URL}/control/status`).catch(() => null),
         ]);
         if (tRes.ok) setTrafficData(await tRes.json());
         if (cRes.ok) {
@@ -226,6 +286,10 @@ const Dashboard = () => {
             setAutoMode(d.armed === true);
           }
           setAutoStatus(d);
+        }
+        if (ctrlRes?.ok) {
+          const ctrlData = await ctrlRes.json();
+          if (ctrlData.ok) setEngineStatus(ctrlData.engines);
         }
         setLastUpdate(new Date());
       } catch {}
@@ -470,6 +534,32 @@ const Dashboard = () => {
     }
   };
 
+  const engineControl = async (engine, action) => {
+    const label = engine === "ic" ? "Iron Condor" : "Traffic Light";
+    const broker = engine === "ic" ? "Kite" : "Fyers";
+    if (action === "stop") {
+      if (!window.confirm(`⚠️ Stop ${label} engine?\n\nPm2 process will be killed immediately.\nOpen positions will NOT be closed — check ${broker} manually.`)) return;
+    }
+    setEngineAction((prev) => ({ ...prev, [engine]: action }));
+    try {
+      const res  = await fetch(`${CTRL_URL}/control/${engine}/${action}`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) alert(`❌ ${action} failed: ${data.error || "Unknown error"}`);
+    } catch (err) {
+      alert(`❌ ${action} failed: ${err.message}`);
+    } finally {
+      // Refresh status after 2s to reflect new state
+      setTimeout(async () => {
+        try {
+          const r = await fetch(`${CTRL_URL}/control/status`);
+          const d = await r.json();
+          if (d.ok) setEngineStatus(d.engines);
+        } catch {}
+        setEngineAction((prev) => ({ ...prev, [engine]: null }));
+      }, 2000);
+    }
+  };
+
   /* ── Status Signals for UI Matching ─────────────────────────────────────── */
   const icSignal = condorData.length === 0 ? "WAITING" : condorData[0].status === "COMPLETED" ? "CLOSED" : "ACTIVE";
   
@@ -615,6 +705,7 @@ const Dashboard = () => {
                   )}
                 </button>
                 <FeedDot status={connected ? (feedStatus === "error" ? "error" : "ok") : "connecting"} />
+                <EngineControls engine="ic" status={engineStatus.ic} action={engineAction.ic} onControl={engineControl} />
               </div>
             }
           />
@@ -952,6 +1043,7 @@ const Dashboard = () => {
                     {trafficData.signal}
                   </Tag>
                   <FeedDot status={connected ? "ok" : "connecting"} />
+                  <EngineControls engine="tl" status={engineStatus.tl} action={engineAction.tl} onControl={engineControl} />
                 </div>
               }
             />
