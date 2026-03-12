@@ -680,10 +680,10 @@ const Dashboard = () => {
                       ? "success"
                       : icSignal === "CLOSED"
                         ? "neutral"
-                        : "warning"
+                        : "neutral"
                   }
                 >
-                  {icSignal}
+                  {icSignal === "WAITING" ? "IDLE" : icSignal}
                 </Tag>
                 <button
                   onClick={toggleAutoMode}
@@ -1062,10 +1062,10 @@ const Dashboard = () => {
                         ? "success"
                         : trafficData.signal === "CLOSED"
                           ? "neutral"
-                          : "warning"
+                          : "info"
                     }
                   >
-                    {trafficData.signal}
+                    {trafficData.signal === "WAITING" ? "SCANNING" : trafficData.signal}
                   </Tag>
                   <FeedDot status={connected ? "ok" : "connecting"} />
                   <EngineControls engine="tl" status={engineStatus.tl} action={engineAction.tl} onControl={engineControl} />
