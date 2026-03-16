@@ -1124,11 +1124,11 @@ const Dashboard = () => {
                       {dnExiting ? "EXITING" : dnActive ? "ACTIVE" : dnCompleted ? "COMPLETED" : "NO POSITION"}
                     </Tag>
 
-                    {/* ON / OFF toggle button wired to backend */}
+                    {/* ENTER / EXIT toggle button — manual override (auto entry runs Friday 3:20 PM) */}
                     <button
                       onClick={toggleDnStrategy}
                       disabled={dnToggling || dnExiting}
-                      title={dnActive ? "Exit debit neutral position" : "Enter debit neutral position"}
+                      title={dnActive ? "Exit debit neutral position manually" : "Enter debit neutral position manually (auto entry: Friday 3:20 PM)"}
                       className={`flex items-center gap-1 px-2 py-1 rounded border text-[7px] font-black uppercase tracking-widest transition-all
                         ${dnActive
                           ? "bg-red-500/10 border-red-500/25 text-red-400 hover:bg-red-500/18"
@@ -1138,7 +1138,7 @@ const Dashboard = () => {
                     >
                       <Zap size={10} className={dnActive ? "text-red-400" : "text-violet-400"} />
                       <span>
-                        {dnToggling ? "…" : dnExiting ? "…" : dnActive ? "OFF" : "ON"}
+                        {dnToggling ? "…" : dnExiting ? "…" : dnActive ? "EXIT" : "ENTER"}
                       </span>
                     </button>
 
@@ -1275,10 +1275,10 @@ const Dashboard = () => {
                   </span>
                   <span className="text-slate-700 text-[9px] text-center max-w-xs">
                     {dnOnline
-                      ? "Auto-enters Friday 3:20 PM · or press Turn ON to enter manually"
+                      ? "Auto-enters Friday 3:20 PM · or press ENTER to enter manually"
                       : engineStatus.dn
                         ? "Start the engine to begin monitoring"
-                        : "Auto-enters Friday 3:20 PM · or press Turn ON to enter manually"}
+                        : "Auto-enters Friday 3:20 PM · or press ENTER to enter manually"}
                   </span>
                 </div>
               )}
