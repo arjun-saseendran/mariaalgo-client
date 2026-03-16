@@ -39,9 +39,12 @@ const DN_URL = import.meta.env.VITE_DN_URL
   ? import.meta.env.VITE_DN_URL
   : "https://mariaalgo.online/dn";
 
-const socket    = io(IC_URL, { withCredentials: true });  // Iron Condor (port 3002)
-const tlSocket  = io(TL_URL, { withCredentials: true });  // Traffic Light (port 3001)
-const dnSocket  = io(DN_URL, { withCredentials: true });  // Debit Neutral (port 3004)
+const socket    = io(IC_URL, { withCredentials: true });  // Iron Condor — main server
+const tlSocket  = io(TL_URL, { withCredentials: true, reconnectionDelay: 3000, reconnectionDelayMax: 10000, timeout: 5000 });
+const dnSocket  = io(DN_URL, { withCredentials: true, reconnectionDelay: 3000, reconnectionDelayMax: 10000, timeout: 5000 });
+// Silence reconnect errors for engine sockets — engine offline is normal, not a crash
+tlSocket.on("connect_error", () => {});
+dnSocket.on("connect_error", () => {});
 
 const LOG_STYLE = {
   success: "text-emerald-400",
@@ -241,6 +244,7 @@ const Dashboard = () => {
   const logsEndRef = useRef(null);
   const [engineStatus, setEngineStatus] = useState({ ic: null, tl: null, dn: null }); // from control server
   const [engineAction, setEngineAction] = useState({ ic: null, tl: null, dn: null }); // "starting"|"stopping"|"restarting"|null
+  const [ctrlOnline, setCtrlOnline]     = useState(false); // true only when pm2 control server responds
 
   // ── Debit Neutral state ────────────────────────────────────────────────────
   const [dnTrade, setDnTrade]           = useState(null);   // active trade from backend
@@ -305,7 +309,12 @@ const Dashboard = () => {
         }
         if (ctrlRes?.ok) {
           const ctrlData = await ctrlRes.json();
-          if (ctrlData.ok) setEngineStatus(ctrlData.engines);
+          if (ctrlData.ok) {
+            setEngineStatus(ctrlData.engines);
+            setCtrlOnline(true);
+          }
+        } else {
+          setCtrlOnline(false);
         }
         if (dnRes?.ok) {
           const dnData = await dnRes.json();
@@ -664,28 +673,20 @@ const Dashboard = () => {
               Maria<span className="text-emerald-500">Algo</span>
             </h1>
             <div className="flex items-center gap-2 mt-0.5">
-              {/* Server online indicator — based on pm2 process status, not socket */}
-              {(() => {
-                const anyOnline = engineStatus.ic?.pm2 === "online"
-                               || engineStatus.tl?.pm2 === "online"
-                               || engineStatus.dn?.pm2 === "online";
-                const allKnown = engineStatus.ic || engineStatus.tl || engineStatus.dn;
-                if (!allKnown) {
-                  return (
-                    <span className="text-[8px] font-bold uppercase tracking-widest text-slate-600">
-                      ○ Connecting…
-                    </span>
-                  );
-                }
-                return (
-                  <div className="flex items-center gap-1.5">
-                    <span className={`w-1 h-1 rounded-full ${anyOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
-                    <span className={`text-[8px] font-bold uppercase tracking-widest ${anyOnline ? "text-emerald-600" : "text-red-500"}`}>
-                      {anyOnline ? "Online" : "Offline"}
-                    </span>
-                  </div>
-                );
-              })()}
+              {/* Logo indicator — ONLINE/OFFLINE based only on socket connection to main IC server.
+                  Individual engine pm2 states (tl/dn offline) do NOT affect this indicator.
+                  Only goes Offline when the IC server process itself is down. */}
+              {ctrlOnline ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[8px] font-bold uppercase tracking-widest text-emerald-600">Online</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1 h-1 rounded-full bg-red-500" />
+                  <span className="text-[8px] font-bold uppercase tracking-widest text-red-500">Offline</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
