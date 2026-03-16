@@ -246,7 +246,6 @@ const Dashboard = () => {
   const [engineStatus, setEngineStatus] = useState({ ic: null, tl: null, dn: null }); // from control server
   const [engineAction, setEngineAction] = useState({ ic: null, tl: null, dn: null }); // "starting"|"stopping"|"restarting"|null
   const [ctrlOnline, setCtrlOnline]     = useState(false); // true only when pm2 control server responds
-  const [ctrlOnline, setCtrlOnline]     = useState(false); // true only when pm2 control server responds
 
   // ── Debit Neutral state ────────────────────────────────────────────────────
   const [dnTrade, setDnTrade]           = useState(null);   // active trade from backend
