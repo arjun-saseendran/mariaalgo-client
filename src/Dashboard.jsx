@@ -83,7 +83,7 @@ const Tag = ({ children, variant = "neutral" }) => {
   };
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[9px] font-black uppercase tracking-widest ${variants[variant]}`}
+      className={`inline-flex items-center px-1.5 py-0 rounded border text-[7px] font-black uppercase tracking-widest ${variants[variant]}`}
     >
       {children}
     </span>
@@ -119,12 +119,12 @@ const SectionHeader = ({
   iconColor = "text-slate-400",
   right,
 }) => (
-  <div className="flex items-center gap-2.5 px-3 py-2 border-b border-slate-800/60">
-    <Icon size={12} className={iconColor} />
-    <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">
+  <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-800/60">
+    <Icon size={10} className={iconColor} />
+    <span className="text-[8px] font-black uppercase tracking-[0.12em] text-slate-500">
       {title}
     </span>
-    {right && <div className="ml-auto flex items-center gap-2">{right}</div>}
+    {right && <div className="ml-auto flex items-center gap-1">{right}</div>}
   </div>
 );
 
@@ -146,7 +146,7 @@ const FeedDot = ({ status }) => {
   }[status] || { dot: "bg-amber-500", text: "text-amber-500", label: "Wait" }; 
   return (
     <div className="flex items-center gap-1.5">
-      <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${cfg.dot}`} />
+      <span className={`w-1 h-1 rounded-full animate-pulse ${cfg.dot}`} />
       <span
         className={`text-[9px] font-black uppercase tracking-widest ${cfg.text}`}
       >
@@ -168,10 +168,10 @@ const EngineControls = ({ engine, status, action, onControl }) => {
   }
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-0.5">
       {/* Status dot */}
-      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
-      <span className={`text-[8px] font-black uppercase tracking-widest mr-1 ${isOnline ? "text-emerald-600" : "text-red-600"}`}>
+      <span className={`w-1 h-1 rounded-full shrink-0 ${isOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
+      <span className={`text-[7px] font-black uppercase tracking-widest mr-0.5 ${isOnline ? "text-emerald-600" : "text-red-600"}`}>
         {isOnline ? "Online" : "Offline"}
       </span>
 
@@ -181,7 +181,7 @@ const EngineControls = ({ engine, status, action, onControl }) => {
             onClick={() => onControl(engine, "restart")}
             disabled={isBusy}
             title="Restart engine"
-            className={`px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all bg-amber-500/10 border-amber-500/25 text-amber-400 hover:bg-amber-500/20 ${isBusy ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+            className={`px-1.5 py-1 rounded border text-[7px] font-black uppercase tracking-widest transition-all bg-amber-500/10 border-amber-500/25 text-amber-400 hover:bg-amber-500/20 ${isBusy ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
           >
             {action === "restart" ? "…" : "↺"}
           </button>
@@ -189,7 +189,7 @@ const EngineControls = ({ engine, status, action, onControl }) => {
             onClick={() => onControl(engine, "stop")}
             disabled={isBusy}
             title="Stop engine"
-            className={`px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all bg-red-500/10 border-red-500/25 text-red-400 hover:bg-red-500/20 ${isBusy ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+            className={`px-1.5 py-1 rounded border text-[7px] font-black uppercase tracking-widest transition-all bg-red-500/10 border-red-500/25 text-red-400 hover:bg-red-500/20 ${isBusy ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
           >
             {action === "stop" ? "…" : "■"}
           </button>
@@ -199,7 +199,7 @@ const EngineControls = ({ engine, status, action, onControl }) => {
           onClick={() => onControl(engine, "start")}
           disabled={isBusy}
           title="Start engine"
-          className={`px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all bg-emerald-500/10 border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/20 ${isBusy ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+          className={`px-1.5 py-1 rounded border text-[7px] font-black uppercase tracking-widest transition-all bg-emerald-500/10 border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/20 ${isBusy ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
         >
           {action === "start" ? "…" : "▶ Start"}
         </button>
@@ -679,7 +679,7 @@ const Dashboard = () => {
                 }
                 return (
                   <div className="flex items-center gap-1.5">
-                    <span className={`w-1.5 h-1.5 rounded-full ${anyOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
+                    <span className={`w-1 h-1 rounded-full ${anyOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
                     <span className={`text-[8px] font-bold uppercase tracking-widest ${anyOnline ? "text-emerald-600" : "text-red-500"}`}>
                       {anyOnline ? "Online" : "Offline"}
                     </span>
@@ -701,7 +701,7 @@ const Dashboard = () => {
           
           <button
             onClick={() => setShowHistory(true)}
-            className="flex items-center gap-2 bg-blue-600/8 cursor-pointer hover:bg-blue-600/15 border border-blue-500/20 hover:border-blue-500/40 text-blue-400 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-[0.12em] transition-all"
+            className="flex items-center gap-1.5 bg-blue-600/8 cursor-pointer hover:bg-blue-600/15 border border-blue-500/20 hover:border-blue-500/40 text-blue-400 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-[0.12em] transition-all"
           >
             <TrendingUp size={12} />
             <span className="hidden sm:inline">History</span>
@@ -709,7 +709,7 @@ const Dashboard = () => {
 
           <button
             onClick={() => setShowOptionChain(true)}
-            className="flex items-center gap-2 bg-blue-600/8 cursor-pointer hover:bg-blue-600/15 border border-blue-500/20 hover:border-blue-500/40 text-blue-400 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-[0.12em] transition-all"
+            className="flex items-center gap-1.5 bg-blue-600/8 cursor-pointer hover:bg-blue-600/15 border border-blue-500/20 hover:border-blue-500/40 text-blue-400 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-[0.12em] transition-all"
           >
             <Layers size={12} />
             <span className="hidden sm:inline">Chain</span>
@@ -737,7 +737,7 @@ const Dashboard = () => {
             title="Iron Condor"
             iconColor="text-amber-500/80"
             right={
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 <Tag
                   variant={
                     icSignal === "ACTIVE"
@@ -752,7 +752,7 @@ const Dashboard = () => {
                 <button
                   onClick={toggleAutoMode}
                   disabled={autoToggling}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all ${
+                  className={`flex items-center gap-1 px-2 py-1 rounded border text-[7px] font-black uppercase tracking-widest transition-all ${
                     autoMode
                       ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/18"
                       : "bg-slate-800/60 border-slate-700/60 text-slate-500 hover:border-slate-600 hover:text-slate-300"
@@ -762,20 +762,11 @@ const Dashboard = () => {
                     size={10}
                     className={autoMode ? "text-emerald-400" : "text-slate-600"}
                   />
-                  <span className="hidden sm:inline">
-                    {autoToggling
-                      ? "…"
-                      : autoMode
-                        ? autoStatus?.entryDone
-                          ? "Auto ACTIVE"
-                          : "Auto ARMED"
-                        : "Auto OFF"}
-                  </span>
-                  <span className="sm:hidden">
-                    {autoMode ? "AUTO" : "OFF"}
+                  <span>
+                    {autoToggling ? "…" : autoMode ? (autoStatus?.entryDone ? "LIVE" : "ARMED") : "AUTO"}
                   </span>
                   {autoMode && autoStatus?.gapOpenHold && (
-                    <span className="ml-1 text-amber-400/80">Hold</span>
+                    <span className="ml-0.5 text-amber-400/80">H</span>
                   )}
                 </button>
                 <FeedDot status={connected ? (feedStatus === "error" ? "error" : "ok") : "connecting"} />
@@ -1127,7 +1118,7 @@ const Dashboard = () => {
                 title="Debit Neutral"
                 iconColor="text-violet-500/80"
                 right={
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
                     {/* Status tag */}
                     <Tag variant={dnActive ? "success" : dnExiting ? "warning" : dnCompleted ? "neutral" : "neutral"}>
                       {dnExiting ? "EXITING" : dnActive ? "ACTIVE" : dnCompleted ? "COMPLETED" : "NO POSITION"}
@@ -1138,7 +1129,7 @@ const Dashboard = () => {
                       onClick={toggleDnStrategy}
                       disabled={dnToggling || dnExiting}
                       title={dnActive ? "Exit debit neutral position" : "Enter debit neutral position"}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all
+                      className={`flex items-center gap-1 px-2 py-1 rounded border text-[7px] font-black uppercase tracking-widest transition-all
                         ${dnActive
                           ? "bg-red-500/10 border-red-500/25 text-red-400 hover:bg-red-500/18"
                           : "bg-violet-500/10 border-violet-500/25 text-violet-400 hover:bg-violet-500/18"
@@ -1146,11 +1137,8 @@ const Dashboard = () => {
                         ${(dnToggling || dnExiting) ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                     >
                       <Zap size={10} className={dnActive ? "text-red-400" : "text-violet-400"} />
-                      <span className="hidden sm:inline">
-                        {dnToggling ? "…" : dnExiting ? "Exiting…" : dnActive ? "Turn OFF" : "Turn ON"}
-                      </span>
-                      <span className="sm:hidden">
-                        {dnToggling ? "…" : dnActive ? "OFF" : "ON"}
+                      <span>
+                        {dnToggling ? "…" : dnExiting ? "…" : dnActive ? "OFF" : "ON"}
                       </span>
                     </button>
 
@@ -1298,18 +1286,14 @@ const Dashboard = () => {
           );
         })()}
 
-        </div>{/* end 3-col strategy row */}
-
-        {/* ── Bottom row: Traffic Light + Live Logs ─────────────────────── */}
-        <div className="grid grid-cols-2 gap-2 h-48 shrink-0">
-          {/* LEFT: Traffic Light */}
+          {/* ── Traffic Light (3rd column in top grid) ───────────────────── */}
           <div className="bg-[#09090d] border border-slate-800/70 rounded-xl overflow-hidden flex flex-col">
             <SectionHeader
               icon={Radio}
               title="Traffic Light"
               iconColor="text-emerald-500/80"
               right={
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   {engineStatus.tl?.pm2 === "online" || !engineStatus.tl ? (
                     <Tag
                       variant={
@@ -1444,17 +1428,17 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* RIGHT: Live Logs */}
-          <div
-            className="bg-[#09090d] border border-slate-800/70 rounded-xl overflow-hidden flex flex-col shadow-xl"
-          >
+        </div>{/* end 3-col strategy grid */}
+
+        {/* ── Live Logs — compact bottom strip ──────────────────────────── */}
+        <div className="bg-[#09090d] border border-slate-800/70 rounded-xl overflow-hidden flex flex-col h-44 shrink-0">
             <SectionHeader
               icon={BarChart2}
               title="Live Logs"
               iconColor={connected ? "text-emerald-500" : "text-amber-500"}
               right={
                 <div className="flex items-center gap-1">
-                  {["ALL", "TRAFFIC", "CONDOR", "DEBIT_NEUTRAL"].map((f) => (
+                  {["ALL", "TRAFFIC", "CONDOR", "DEBIT"].map((f) => (
                     <button
                       key={f}
                       onClick={() => setLogFilter(f)}
@@ -1464,7 +1448,7 @@ const Dashboard = () => {
                             ? "bg-emerald-500/15 text-emerald-400"
                             : f === "CONDOR"
                               ? "bg-amber-500/15 text-amber-400"
-                              : f === "DEBIT_NEUTRAL"
+                              : f === "DEBIT"
                                 ? "bg-violet-500/15 text-violet-400"
                                 : "bg-slate-700 text-white"
                           : "text-slate-600 hover:text-slate-400"
@@ -1542,7 +1526,6 @@ const Dashboard = () => {
               )}
               <div ref={logsEndRef} />
             </div>
-          </div>
         </div>
       </div>
     </div>
