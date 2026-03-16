@@ -257,7 +257,7 @@ const Dashboard = () => {
           fetch(`${TL_URL}/api/history`),
           fetch(`${IC_URL}/api/auto-condor/status`),
           fetch(`${CTRL_URL}/control/status`).catch(() => null),
-          fetch(`${DN_URL}/api/trade/active`).catch(() => null),
+          fetch(`${DN_URL}/api/debit-neutral/active`).catch(() => null),
         ]);
         if (tRes.ok) setTrafficData(await tRes.json());
         if (cRes.ok) {
@@ -606,7 +606,7 @@ const Dashboard = () => {
     try {
       if (isActive) {
         // Manual exit — calls POST /api/trade/exit on DN server
-        const res = await fetch(`${DN_URL}/api/trade/exit`, { method: "POST" });
+        const res = await fetch(`${DN_URL}/api/debit-neutral/exit`, { method: "POST" });
         if (!res.ok) {
           const d = await res.json().catch(() => ({}));
           alert("❌ Exit failed: " + (d.error || "Unknown error"));
@@ -616,7 +616,7 @@ const Dashboard = () => {
         }
       } else {
         // Manual entry — calls POST /api/trade/enter on DN server
-        const res = await fetch(`${DN_URL}/api/trade/enter`, { method: "POST" });
+        const res = await fetch(`${DN_URL}/api/debit-neutral/enter`, { method: "POST" });
         if (!res.ok) {
           const d = await res.json().catch(() => ({}));
           alert("❌ Entry failed: " + (d.error || "Unknown error"));
@@ -717,7 +717,7 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <div className="relative z-10 flex-1 overflow-hidden flex flex-col gap-2 p-3 min-h-0">
+      <div className="relative z-10 flex-1 overflow-hidden flex flex-col gap-1.5 p-2 min-h-0">
         {/* ── Feed alert (compact inline banner, no vertical space wasted) ── */}
         {feedStatus === "error" && (
           <div className="flex items-center gap-3 bg-red-500/8 border border-red-500/25 rounded-lg px-3 py-1.5 shrink-0">
@@ -728,7 +728,7 @@ const Dashboard = () => {
         )}
 
         {/* ── 3-column strategy row ──────────────────────────────────────── */}
-        <div className="grid grid-cols-3 gap-2 flex-1 min-h-0">
+        <div className="grid grid-cols-3 gap-1.5 flex-1 min-h-0">
 
         {/* ── Iron Condor Panel ──────────────────────────────────────────── */}
         <div className="bg-[#09090d] border border-slate-800/70 rounded-xl overflow-hidden shadow-2xl flex flex-col min-h-0">
@@ -1431,7 +1431,7 @@ const Dashboard = () => {
         </div>{/* end 3-col strategy grid */}
 
         {/* ── Live Logs — compact bottom strip ──────────────────────────── */}
-        <div className="bg-[#09090d] border border-slate-800/70 rounded-xl overflow-hidden flex flex-col h-44 shrink-0">
+        <div className="bg-[#09090d] border border-slate-800/70 rounded-xl overflow-hidden flex flex-col h-36 shrink-0">
             <SectionHeader
               icon={BarChart2}
               title="Live Logs"
