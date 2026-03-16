@@ -34,8 +34,14 @@ const CTRL_URL = import.meta.env.VITE_CONTROL_URL
   ? import.meta.env.VITE_CONTROL_URL
   : "https://mariaalgo.online/ctrl";
 
+// Debit Neutral server (port 3004) — proxied under /dn/ by nginx
+const DN_URL = import.meta.env.VITE_DN_URL
+  ? import.meta.env.VITE_DN_URL
+  : "https://mariaalgo.online/dn";
+
 const socket    = io(IC_URL, { withCredentials: true });  // Iron Condor (port 3002)
 const tlSocket  = io(TL_URL, { withCredentials: true });  // Traffic Light (port 3001)
+const dnSocket  = io(DN_URL, { withCredentials: true });  // Debit Neutral (port 3004)
 
 const LOG_STYLE = {
   success: "text-emerald-400",
@@ -52,6 +58,10 @@ const STRATEGY_BADGE = {
   CONDOR: {
     label: "IC",
     cls: "bg-amber-500/15 text-amber-400 border border-amber-500/20",
+  },
+  DEBIT_NEUTRAL: {
+    label: "DN",
+    cls: "bg-violet-500/15 text-violet-400 border border-violet-500/20",
   },
 };
 
@@ -229,19 +239,25 @@ const Dashboard = () => {
   const [autoToggling, setAutoToggling] = useState(false);
   const autoArmedRef = useRef(false);
   const logsEndRef = useRef(null);
-  const [engineStatus, setEngineStatus] = useState({ ic: null, tl: null }); // from control server
-  const [engineAction, setEngineAction] = useState({ ic: null, tl: null }); // "starting"|"stopping"|"restarting"|null
+  const [engineStatus, setEngineStatus] = useState({ ic: null, tl: null, dn: null }); // from control server
+  const [engineAction, setEngineAction] = useState({ ic: null, tl: null, dn: null }); // "starting"|"stopping"|"restarting"|null
+
+  // ── Debit Neutral state ────────────────────────────────────────────────────
+  const [dnTrade, setDnTrade]           = useState(null);   // active trade from backend
+  const [dnToggling, setDnToggling]     = useState(false);  // toggle in-flight
+  const [dnMonitor, setDnMonitor]       = useState(null);   // live monitor snapshot from socket
 
   /* ── Data polling ──────────────────────────────────────────────────────── */
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [tRes, cRes, hRes, aRes, ctrlRes] = await Promise.all([
+        const [tRes, cRes, hRes, aRes, ctrlRes, dnRes] = await Promise.all([
           fetch(`${TL_URL}/api/traffic/status`),
           fetch(`${IC_URL}/api/condor/positions`),
           fetch(`${TL_URL}/api/history`),
           fetch(`${IC_URL}/api/auto-condor/status`),
           fetch(`${CTRL_URL}/control/status`).catch(() => null),
+          fetch(`${DN_URL}/api/trade/active`).catch(() => null),
         ]);
         if (tRes.ok) setTrafficData(await tRes.json());
         if (cRes.ok) {
@@ -290,6 +306,10 @@ const Dashboard = () => {
         if (ctrlRes?.ok) {
           const ctrlData = await ctrlRes.json();
           if (ctrlData.ok) setEngineStatus(ctrlData.engines);
+        }
+        if (dnRes?.ok) {
+          const dnData = await dnRes.json();
+          setDnTrade(dnData?.trade ?? null);
         }
         setLastUpdate(new Date());
       } catch {}
@@ -358,6 +378,11 @@ const Dashboard = () => {
       });
     });
 
+    // Debit Neutral socket listeners
+    dnSocket.on("trade_log",           (entry) => setLogs((prev) => [...prev, entry].slice(-200)));
+    dnSocket.on("debitNeutral:monitor",(d)     => setDnMonitor(d));
+    dnSocket.on("debitNeutral:exited", ()      => { setDnTrade(null); setDnMonitor(null); });
+
     return () => {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
@@ -369,6 +394,10 @@ const Dashboard = () => {
       
       tlSocket.off("trade_log");
       tlSocket.off("market_tick");
+
+      dnSocket.off("trade_log");
+      dnSocket.off("debitNeutral:monitor");
+      dnSocket.off("debitNeutral:exited");
     };
   }, []);
 
@@ -547,8 +576,8 @@ const Dashboard = () => {
   };
 
   const engineControl = async (engine, action) => {
-    const label = engine === "ic" ? "Iron Condor" : "Traffic Light";
-    const broker = engine === "ic" ? "Kite" : "Fyers";
+    const label = engine === "ic" ? "Iron Condor" : engine === "dn" ? "Debit Neutral" : "Traffic Light";
+    const broker = engine === "ic" ? "Kite" : engine === "dn" ? "Upstox" : "Fyers";
 
     setEngineAction((prev) => ({ ...prev, [engine]: action }));
     try {
@@ -567,6 +596,39 @@ const Dashboard = () => {
         } catch {}
         setEngineAction((prev) => ({ ...prev, [engine]: null }));
       }, 2000);
+    }
+  };
+
+  /* ── Debit Neutral toggle ───────────────────────────────────────────────── */
+  const toggleDnStrategy = async () => {
+    const isActive = !!(dnTrade && dnTrade.status === "ACTIVE");
+    setDnToggling(true);
+    try {
+      if (isActive) {
+        // Manual exit — calls POST /api/trade/exit on DN server
+        const res = await fetch(`${DN_URL}/api/trade/exit`, { method: "POST" });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          alert("❌ Exit failed: " + (d.error || "Unknown error"));
+        } else {
+          setDnTrade(null);
+          setDnMonitor(null);
+        }
+      } else {
+        // Manual entry — calls POST /api/trade/enter on DN server
+        const res = await fetch(`${DN_URL}/api/trade/enter`, { method: "POST" });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          alert("❌ Entry failed: " + (d.error || "Unknown error"));
+        } else {
+          const d = await res.json().catch(() => ({}));
+          setDnTrade(d.trade ?? null);
+        }
+      }
+    } catch (err) {
+      alert("❌ Request failed: " + err.message);
+    } finally {
+      setDnToggling(false);
     }
   };
 
@@ -602,11 +664,28 @@ const Dashboard = () => {
               Maria<span className="text-emerald-500">Algo</span>
             </h1>
             <div className="flex items-center gap-2 mt-0.5">
-              <span
-                className={`text-[8px] font-bold uppercase tracking-widest ${connected ? "text-emerald-600" : "text-amber-500"}`}
-              >
-                {connected ? "● Connected" : "○ Connecting…"}
-              </span>
+              {/* Server online indicator — based on pm2 process status, not socket */}
+              {(() => {
+                const anyOnline = engineStatus.ic?.pm2 === "online"
+                               || engineStatus.tl?.pm2 === "online"
+                               || engineStatus.dn?.pm2 === "online";
+                const allKnown = engineStatus.ic || engineStatus.tl || engineStatus.dn;
+                if (!allKnown) {
+                  return (
+                    <span className="text-[8px] font-bold uppercase tracking-widest text-slate-600">
+                      ○ Connecting…
+                    </span>
+                  );
+                }
+                return (
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full ${anyOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
+                    <span className={`text-[8px] font-bold uppercase tracking-widest ${anyOnline ? "text-emerald-600" : "text-red-500"}`}>
+                      {anyOnline ? "Online" : "Offline"}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -1046,6 +1125,194 @@ const Dashboard = () => {
           )}
         </div>
 
+        {/* ── Debit Neutral Panel ──────────────────────────────────────── */}
+        {(() => {
+          const dnActive    = dnTrade?.status === "ACTIVE";
+          const dnExiting   = dnTrade?.status === "EXITING";
+          const dnCompleted = dnTrade?.status === "COMPLETED";
+          const dnOnline    = engineStatus.dn?.pm2 === "online";
+          const mon         = dnMonitor; // live monitor snapshot from socket
+          const livePnl     = mon ? parseFloat(mon.pnl) : null;
+          const pnlPos      = livePnl !== null ? livePnl >= 0 : null;
+
+          return (
+            <div className="bg-[#09090d] border border-slate-800/70 rounded-2xl overflow-hidden shadow-2xl">
+              <SectionHeader
+                icon={Activity}
+                title="Debit Neutral"
+                iconColor="text-violet-500/80"
+                right={
+                  <div className="flex items-center gap-2">
+                    {/* Status tag */}
+                    <Tag variant={dnActive ? "success" : dnExiting ? "warning" : dnCompleted ? "neutral" : "neutral"}>
+                      {dnExiting ? "EXITING" : dnActive ? "ACTIVE" : dnCompleted ? "COMPLETED" : "NO POSITION"}
+                    </Tag>
+
+                    {/* ON / OFF toggle button wired to backend */}
+                    <button
+                      onClick={toggleDnStrategy}
+                      disabled={dnToggling || dnExiting}
+                      title={dnActive ? "Exit debit neutral position" : "Enter debit neutral position"}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all
+                        ${dnActive
+                          ? "bg-red-500/10 border-red-500/25 text-red-400 hover:bg-red-500/18"
+                          : "bg-violet-500/10 border-violet-500/25 text-violet-400 hover:bg-violet-500/18"
+                        }
+                        ${(dnToggling || dnExiting) ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                    >
+                      <Zap size={10} className={dnActive ? "text-red-400" : "text-violet-400"} />
+                      <span className="hidden sm:inline">
+                        {dnToggling ? "…" : dnExiting ? "Exiting…" : dnActive ? "Turn OFF" : "Turn ON"}
+                      </span>
+                      <span className="sm:hidden">
+                        {dnToggling ? "…" : dnActive ? "OFF" : "ON"}
+                      </span>
+                    </button>
+
+                    {/* PM2 engine controls */}
+                    <EngineControls engine="dn" status={engineStatus.dn} action={engineAction.dn} onControl={engineControl} />
+                  </div>
+                }
+              />
+
+              {/* Body */}
+              {dnActive || dnExiting ? (
+                <div className="p-4 space-y-3">
+                  {/* Summary bar */}
+                  <div className="flex flex-wrap sm:flex-nowrap items-center justify-between bg-[#0d0d10] rounded-xl px-4 py-3 border border-slate-800/50 gap-4">
+                    <div className="flex items-center gap-4 overflow-x-auto pb-1 sm:pb-0">
+                      <div className="text-center shrink-0">
+                        <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">Index</div>
+                        <div className="text-sm font-black text-slate-300 font-mono">{dnTrade.index ?? "SENSEX"}</div>
+                      </div>
+                      <div className="w-px h-8 bg-slate-800 shrink-0" />
+                      <div className="text-center shrink-0">
+                        <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">Expiry</div>
+                        <div className="text-sm font-black text-slate-300 font-mono">{dnTrade.expiry ?? "—"}</div>
+                      </div>
+                      <div className="w-px h-8 bg-slate-800 shrink-0" />
+                      <div className="text-center shrink-0">
+                        <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">Qty</div>
+                        <div className="text-sm font-black text-slate-300 font-mono">{dnTrade.quantity ?? "—"}</div>
+                      </div>
+                      {mon?.trailActive && (
+                        <>
+                          <div className="w-px h-8 bg-slate-800 shrink-0" />
+                          <div className="text-center shrink-0">
+                            <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">Floor 🔒</div>
+                            <div className="text-sm font-black text-emerald-400 font-mono">₹{mon.lockedProfit}</div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    {/* Live P&L */}
+                    <div className="text-left sm:text-right w-full sm:w-auto border-t border-slate-800/50 sm:border-t-0 pt-2 sm:pt-0">
+                      <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">Live P&L</div>
+                      <div className={`text-2xl font-black font-mono ${livePnl === null ? "text-slate-700" : pnlPos ? "text-emerald-400" : "text-red-400"}`}>
+                        {livePnl === null ? "—" : `${pnlPos ? "+" : ""}₹${parseFloat(mon.pnl).toFixed(2)}`}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4-leg grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {[
+                      { key: "callBuy",  label: "Call Buy",  accent: "emerald", side: "BUY"  },
+                      { key: "callSell", label: "Call Sell", accent: "red",     side: "SELL" },
+                      { key: "putBuy",   label: "Put Buy",   accent: "emerald", side: "BUY"  },
+                      { key: "putSell",  label: "Put Sell",  accent: "red",     side: "SELL" },
+                    ].map(({ key, label, accent, side }) => {
+                      const alive   = mon?.legsAlive?.[key] ?? dnTrade?.legsAlive?.[key] ?? true;
+                      const legData = mon?.legs?.[key];
+                      const strike  = dnTrade?.strikes?.[key];
+                      const entry   = dnTrade?.entryPremiums?.[key];
+                      const ltp     = legData?.ltp;
+                      return (
+                        <div
+                          key={key}
+                          className={`bg-[#0d0d10] rounded-xl p-3 border transition-all
+                            ${alive
+                              ? accent === "emerald" ? "border-emerald-900/30" : "border-red-900/30"
+                              : "border-slate-800/30 opacity-40"
+                            }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className={`text-[8px] font-black uppercase tracking-widest ${accent === "emerald" ? "text-emerald-500" : "text-red-400"}`}>
+                              {label}
+                            </span>
+                            <Tag variant={alive ? (side === "BUY" ? "success" : "danger") : "neutral"}>
+                              {alive ? side : "EXITED"}
+                            </Tag>
+                          </div>
+                          <div className="space-y-1">
+                            {strike && (
+                              <div className="flex justify-between text-[9px]">
+                                <span className="text-slate-600">Strike</span>
+                                <span className="font-mono font-bold text-slate-300">{strike}</span>
+                              </div>
+                            )}
+                            {entry !== undefined && (
+                              <div className="flex justify-between text-[9px]">
+                                <span className="text-slate-600">Entry</span>
+                                <span className="font-mono font-bold text-slate-400">₹{entry}</span>
+                              </div>
+                            )}
+                            {ltp !== undefined && (
+                              <div className="flex justify-between text-[9px]">
+                                <span className="text-slate-600">LTP</span>
+                                <span className={`font-mono font-bold ${ltp > 0 ? "text-white" : "text-slate-600"}`}>
+                                  {ltp > 0 ? `₹${ltp}` : "—"}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Exiting banner */}
+                  {dnExiting && (
+                    <div className="flex items-center gap-2 bg-amber-500/8 border border-amber-500/25 rounded-lg px-3 py-2">
+                      <Clock size={11} className="text-amber-400" />
+                      <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest">
+                        Exiting all legs — awaiting Upstox confirmation…
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : dnCompleted ? (
+                <div className="flex items-center justify-between px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <Tag variant="neutral">Completed</Tag>
+                    <span className="text-slate-400 text-xs font-mono">{dnTrade?.index ?? "SENSEX"}</span>
+                    <span className="text-slate-500 text-xs hidden sm:inline">
+                      {dnTrade?.exitReason?.replace(/_/g, " ") ?? ""}
+                    </span>
+                  </div>
+                  <span className={`font-black text-lg font-mono ${parseFloat(dnTrade?.realizedPnL ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    ₹{parseFloat(dnTrade?.realizedPnL ?? 0).toFixed(2)}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 py-10">
+                  <Activity size={18} className="text-slate-700" />
+                  <span className="text-slate-600 text-[10px] uppercase tracking-[0.15em] font-black">
+                    {dnOnline ? "No Position" : engineStatus.dn ? "Engine Offline" : "No Position"}
+                  </span>
+                  <span className="text-slate-700 text-[9px] text-center max-w-xs">
+                    {dnOnline
+                      ? "Auto-enters Friday 3:20 PM · or press Turn ON to enter manually"
+                      : engineStatus.dn
+                        ? "Start the engine to begin monitoring"
+                        : "Auto-enters Friday 3:20 PM · or press Turn ON to enter manually"}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* ── Two-panel row ─────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* LEFT: Traffic Light */}
@@ -1201,7 +1468,7 @@ const Dashboard = () => {
               iconColor={connected ? "text-emerald-500" : "text-amber-500"}
               right={
                 <div className="flex items-center gap-1">
-                  {["ALL", "TRAFFIC", "CONDOR"].map((f) => (
+                  {["ALL", "TRAFFIC", "CONDOR", "DEBIT_NEUTRAL"].map((f) => (
                     <button
                       key={f}
                       onClick={() => setLogFilter(f)}
@@ -1211,7 +1478,9 @@ const Dashboard = () => {
                             ? "bg-emerald-500/15 text-emerald-400"
                             : f === "CONDOR"
                               ? "bg-amber-500/15 text-amber-400"
-                              : "bg-slate-700 text-white"
+                              : f === "DEBIT_NEUTRAL"
+                                ? "bg-violet-500/15 text-violet-400"
+                                : "bg-slate-700 text-white"
                           : "text-slate-600 hover:text-slate-400"
                       }`}
                     >
