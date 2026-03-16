@@ -40,6 +40,7 @@ const DN_URL = import.meta.env.VITE_DN_URL
   : "https://mariaalgo.online/dn";
 
 const socket    = io(IC_URL, { withCredentials: true });  // Iron Condor — main server
+socket.on("connect_error", () => {});  // silence 502 errors when IC engine is offline
 const tlSocket  = io(TL_URL, { withCredentials: true, reconnectionDelay: 3000, reconnectionDelayMax: 10000, timeout: 5000 });
 const dnSocket  = io(DN_URL, { withCredentials: true, reconnectionDelay: 3000, reconnectionDelayMax: 10000, timeout: 5000 });
 // Silence reconnect errors for engine sockets — engine offline is normal, not a crash
@@ -245,6 +246,7 @@ const Dashboard = () => {
   const [engineStatus, setEngineStatus] = useState({ ic: null, tl: null, dn: null }); // from control server
   const [engineAction, setEngineAction] = useState({ ic: null, tl: null, dn: null }); // "starting"|"stopping"|"restarting"|null
   const [ctrlOnline, setCtrlOnline]     = useState(false); // true only when pm2 control server responds
+  const [ctrlOnline, setCtrlOnline]     = useState(false); // true only when pm2 control server responds
 
   // ── Debit Neutral state ────────────────────────────────────────────────────
   const [dnTrade, setDnTrade]           = useState(null);   // active trade from backend
@@ -255,11 +257,13 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchAll = async () => {
       try {
+        // All fetches catch silently — 502/network errors when engines are offline
+        // are expected and should not spam the browser console
         const [tRes, cRes, hRes, aRes, ctrlRes, dnRes] = await Promise.all([
-          fetch(`${TL_URL}/api/traffic/status`),
-          fetch(`${IC_URL}/api/condor/positions`),
-          fetch(`${TL_URL}/api/history`),
-          fetch(`${IC_URL}/api/auto-condor/status`),
+          fetch(`${TL_URL}/api/traffic/status`).catch(() => null),
+          fetch(`${IC_URL}/api/condor/positions`).catch(() => null),
+          fetch(`${TL_URL}/api/history`).catch(() => null),
+          fetch(`${IC_URL}/api/auto-condor/status`).catch(() => null),
           fetch(`${CTRL_URL}/control/status`).catch(() => null),
           fetch(`${DN_URL}/api/debit-neutral/active`).catch(() => null),
         ]);
