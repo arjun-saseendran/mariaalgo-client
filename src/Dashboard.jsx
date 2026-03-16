@@ -99,7 +99,7 @@ const StatCard = ({ label, value, valueClass = "text-white", sub, accent }) => (
         className={`absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-${accent}-500/40 to-transparent`}
       />
     )}
-    <div className="text-[9px] text-slate-500 uppercase tracking-[0.12em] mb-1.5 font-semibold">
+    <div className="text-[9px] text-slate-500 uppercase tracking-[0.12em] mb-1 font-semibold">
       {label}
     </div>
     <div className={`font-black text-sm font-mono leading-none ${valueClass}`}>
@@ -717,7 +717,7 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <div className="relative z-10 flex-1 overflow-hidden flex flex-col gap-1.5 p-2 min-h-0">
+      <div className="relative z-10 overflow-hidden flex flex-col gap-1.5 p-2" style={{ height: "calc(100vh - 44px)" }}>
         {/* ── Feed alert (compact inline banner, no vertical space wasted) ── */}
         {feedStatus === "error" && (
           <div className="flex items-center gap-3 bg-red-500/8 border border-red-500/25 rounded-lg px-3 py-1.5 shrink-0">
@@ -728,7 +728,7 @@ const Dashboard = () => {
         )}
 
         {/* ── 3-column strategy row ──────────────────────────────────────── */}
-        <div className="grid grid-cols-3 gap-1.5 flex-1 min-h-0">
+        <div className="grid grid-cols-3 gap-1.5" style={{ height: "calc(100% - 8rem - 6px)", minHeight: 0 }}>
 
         {/* ── Iron Condor Panel ──────────────────────────────────────────── */}
         <div className="bg-[#09090d] border border-slate-800/70 rounded-xl overflow-hidden shadow-2xl flex flex-col min-h-0">
@@ -776,8 +776,8 @@ const Dashboard = () => {
           />
 
           {condorData.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-4 flex-1">
-              <Shield size={18} className="text-slate-700" />
+            <div className="flex flex-col items-center justify-center gap-1 py-2 flex-1">
+              <Shield size={16} className="text-slate-700" />
               <span className="text-slate-600 text-[10px] uppercase tracking-[0.15em] font-black">
                 {engineStatus.ic?.pm2 === "online" ? "No Position" : "Engine Offline"}
               </span>
@@ -803,7 +803,7 @@ const Dashboard = () => {
               </span>
             </div>
           ) : (
-            <div className="p-3 flex-1 overflow-y-auto">
+            <div className="p-2 flex-1 overflow-y-auto">
               {condorData.map((row, i) => {
                 const rowPnl = parseFloat(row.pnl);
                 const pnlPos = rowPnl >= 0;
@@ -824,7 +824,7 @@ const Dashboard = () => {
                           <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">
                             Index
                           </div>
-                          <div className="text-sm font-black text-slate-300 font-mono">
+                          <div className="text-xs font-black text-slate-300 font-mono">
                             {row.index}
                           </div>
                         </div>
@@ -865,7 +865,7 @@ const Dashboard = () => {
                           Live P&L
                         </div>
                         <div
-                          className={`text-xl font-black font-mono ${feedStatus === "error" ? "text-slate-700" : pnlPos ? "text-emerald-400" : "text-red-400"}`}
+                          className={`text-lg font-black font-mono ${feedStatus === "error" ? "text-slate-700" : pnlPos ? "text-emerald-400" : "text-red-400"}`}
                         >
                           {feedStatus === "error" ? "—" : `₹${row.pnl}`}
                         </div>
@@ -1150,7 +1150,7 @@ const Dashboard = () => {
 
               {/* Body */}
               {dnActive || dnExiting ? (
-                <div className="p-3 space-y-2 flex-1 overflow-y-auto">
+                <div className="p-2 space-y-1.5 flex-1 overflow-y-auto">
                   {/* Summary bar */}
                   <div className="flex flex-wrap sm:flex-nowrap items-center justify-between bg-[#0d0d10] rounded-lg px-3 py-2 border border-slate-800/50 gap-2">
                     <div className="flex items-center gap-4 overflow-x-auto pb-1 sm:pb-0">
@@ -1181,7 +1181,7 @@ const Dashboard = () => {
                     {/* Live P&L */}
                     <div className="text-left sm:text-right w-full sm:w-auto border-t border-slate-800/50 sm:border-t-0 pt-2 sm:pt-0">
                       <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">Live P&L</div>
-                      <div className={`text-xl font-black font-mono ${livePnl === null ? "text-slate-700" : pnlPos ? "text-emerald-400" : "text-red-400"}`}>
+                      <div className={`text-lg font-black font-mono ${livePnl === null ? "text-slate-700" : pnlPos ? "text-emerald-400" : "text-red-400"}`}>
                         {livePnl === null ? "—" : `${pnlPos ? "+" : ""}₹${parseFloat(mon.pnl).toFixed(2)}`}
                       </div>
                     </div>
@@ -1268,8 +1268,8 @@ const Dashboard = () => {
                   </span>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center gap-2 py-4 flex-1">
-                  <Activity size={18} className="text-slate-700" />
+                <div className="flex flex-col items-center justify-center gap-1 py-2 flex-1">
+                  <Activity size={16} className="text-slate-700" />
                   <span className="text-slate-600 text-[10px] uppercase tracking-[0.15em] font-black">
                     {dnOnline ? "No Position" : engineStatus.dn ? "Engine Offline" : "No Position"}
                   </span>
@@ -1315,7 +1315,7 @@ const Dashboard = () => {
 
             <div className="p-2 flex-1 overflow-y-auto">
               {trafficData.signal === "ACTIVE" ? (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   <StatCard
                     label="Direction"
                     accent={trafficData.direction === "CE" ? "emerald" : "red"}
@@ -1379,9 +1379,9 @@ const Dashboard = () => {
                   )}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center gap-2 py-2 h-full">
+                <div className="flex flex-col items-center justify-center gap-1 py-1 h-full">
                   <div
-                    className={`text-3xl font-black tracking-tighter ${
+                    className={`text-2xl font-black tracking-tighter ${
                       trafficData.signal === "CLOSED"
                         ? "text-slate-700"
                         : trafficData.signal === "WAITING" && engineStatus.tl?.pm2 !== "online"
@@ -1431,7 +1431,7 @@ const Dashboard = () => {
         </div>{/* end 3-col strategy grid */}
 
         {/* ── Live Logs — compact bottom strip ──────────────────────────── */}
-        <div className="bg-[#09090d] border border-slate-800/70 rounded-xl overflow-hidden flex flex-col h-36 shrink-0">
+        <div className="bg-[#09090d] border border-slate-800/70 rounded-xl overflow-hidden flex flex-col shrink-0" style={{ height: "8rem" }}>
             <SectionHeader
               icon={BarChart2}
               title="Live Logs"
