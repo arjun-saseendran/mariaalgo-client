@@ -80,12 +80,12 @@ const ActionablePriceCell = ({ typeCEPE, strike, price, chp, oi, oiRaw, maxOiRaw
             {chp > 0 ? "+" : ""}{chp?.toFixed(1)}%
           </span>
         )}
-        {(oiRaw > 0 || hasPrice) && (
+        {oiRaw > 0 && (
           <span className="hide-mobile" style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.2, marginTop: 1 }}>
             {oi} · {vol}
           </span>
         )}
-        {oiBarPct > 0 && (
+        {oiRaw > 0 && oiBarPct > 0 && (
           <div style={{ width: "80%", height: 2.5, background: "rgba(255,255,255,0.05)", borderRadius: 2, marginTop: 3, overflow: "hidden" }}>
             <div style={{ width: oiBarPct + "%", height: "100%", background: oiBarClr, borderRadius: 2, transition: "width 0.4s ease" }} />
           </div>
@@ -316,16 +316,20 @@ const OptionChain = ({ onClose }) => {
 
       {/* ── Column headers ── */}
       <div className="table-header" style={{ display: "grid", gridTemplateColumns: "1fr 72px 1fr", padding: "5px 3px", background: C.bgHeader, borderBottom: `1px solid rgba(255,255,255,0.03)`, flexShrink: 0 }}>
-        {[["CALL · OI · Vol", "CE"], ["PUT · OI · Vol", "PE"]].map(([label, side], idx) => (
-          <div key={side} style={{ display: "flex", alignItems: "center" }}>
-            {idx === 1 && <span className="btn-action" style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.1em" }}>BUY</span>}
-            <span style={{ flex: 1, textAlign: "center", fontSize: 8, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</span>
-            {idx === 0 && <span className="btn-action" style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#fca5a5", textTransform: "uppercase", letterSpacing: "0.1em" }}>SELL</span>}
-            {idx === 0 && <span className="btn-action" style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.1em" }}>BUY</span>}
-            {idx === 1 && <span className="btn-action" style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#fca5a5", textTransform: "uppercase", letterSpacing: "0.1em" }}>SELL</span>}
-          </div>
-        ))}
+        {/* CALL side: label centre, B on left, S on right (matching the actual buttons below) */}
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <span className="btn-action" style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.1em" }}>B</span>
+          <span style={{ flex: 1, textAlign: "center", fontSize: 8, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.08em" }}>CALL</span>
+          <span className="btn-action" style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#fca5a5", textTransform: "uppercase", letterSpacing: "0.1em" }}>S</span>
+        </div>
+        {/* Strike centre */}
         <div className="strike-col" style={{ textAlign: "center", fontSize: 8, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", alignSelf: "center" }}>STRIKE</div>
+        {/* PUT side: B on left, label centre, S on right */}
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <span className="btn-action" style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.1em" }}>B</span>
+          <span style={{ flex: 1, textAlign: "center", fontSize: 8, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.08em" }}>PUT</span>
+          <span className="btn-action" style={{ width: 48, textAlign: "center", fontSize: 8, fontWeight: 900, color: "#fca5a5", textTransform: "uppercase", letterSpacing: "0.1em" }}>S</span>
+        </div>
       </div>
 
       {/* ── Chain table ── */}
