@@ -130,10 +130,17 @@ const OptionChain = ({ onClose }) => {
   const lotSize  = LOT_SIZE[symbol] || 65;
   const totalQty = lots * lotSize;
 
-  const fetchChain = async () => {
+  // ✅ FIX 1: useCallback ensures fetchChain always closes over the latest `symbol`.
+  //    Without this, the setInterval callback held a stale closure and kept
+  //    requesting NIFTY even after the user switched to SENSEX.
+  const fetchChain = React.useCallback(async () => {
     try {
       const res = await fetch(`${IC_URL}/api/options/chain?symbol=${symbol}&strikes=${STRIKE_RANGE}`);
-      if (!res.ok) { const e = await res.json().catch(() => ({})); setFetchError(e.error || `Server error ${res.status}`); return; }
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        setFetchError(e.detail || e.error || `Server error ${res.status}`);
+        return;
+      }
       const data = await res.json();
       if (data.error) { setFetchError(data.error); return; }
       if (data.chain) {
@@ -148,10 +155,28 @@ const OptionChain = ({ onClose }) => {
       }
     } catch (err) {
       setFetchError("Failed to reach server");
-    } finally { setLoading(false); }
-  };
+    } finally {
+      setLoading(false);
+    }
+  }, [symbol]); // only symbol matters — not marketClosed
 
-  useEffect(() => { setLoading(true); setChainData([]); setLots(1); fetchChain(); const itv = setInterval(fetchChain, marketClosed ? 60000 : 5000); return () => clearInterval(itv); }, [symbol, marketClosed]);
+  // ✅ FIX 2: removed `marketClosed` from useEffect deps.
+  //    Previously: every fetch called setMarketClosed(false/true) → triggered this
+  //    effect again → setLoading(true) + setChainData([]) → blank screen flash
+  //    and a second fetch immediately wiping the first successful response.
+  //    Fix: read marketClosed via a ref inside the interval so the value stays
+  //    current without being a reactive dependency that restarts the effect.
+  const marketClosedRef = useRef(marketClosed);
+  useEffect(() => { marketClosedRef.current = marketClosed; }, [marketClosed]);
+
+  useEffect(() => {
+    setLoading(true);
+    setChainData([]);
+    setLots(1);
+    fetchChain();
+    const itv = setInterval(fetchChain, marketClosedRef.current ? 60000 : 5000);
+    return () => clearInterval(itv);
+  }, [symbol, fetchChain]); // fetchChain identity changes only when symbol changes
   useEffect(() => { if (atmRowRef.current) setTimeout(() => atmRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 150); }, [atmStrike]);
   useEffect(() => { if (selectedLegs.length > 0) setSelectedLegs(prev => prev.map(l => ({ ...l, lots, qty: lots * lotSize }))); }, [lots]);
 
