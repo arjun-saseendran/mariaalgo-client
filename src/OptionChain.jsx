@@ -130,15 +130,15 @@ const OptionChain = ({ onClose }) => {
   const lotSize  = LOT_SIZE[symbol] || 65;
   const totalQty = lots * lotSize;
 
-  // ✅ FIX 1: useCallback ensures fetchChain always closes over the latest `symbol`.
-  //    Without this, the setInterval callback held a stale closure and kept
-  //    requesting NIFTY even after the user switched to SENSEX.
+  // ✅ FIX 1: useCallback so setInterval always calls with the current symbol.
+  //    Without this, switching NIFTY→SENSEX kept the interval fetching NIFTY
+  //    because the old closure captured the old symbol value.
   const fetchChain = React.useCallback(async () => {
     try {
       const res = await fetch(`${IC_URL}/api/options/chain?symbol=${symbol}&strikes=${STRIKE_RANGE}`);
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
-        setFetchError(e.detail || e.error || `Server error ${res.status}`);
+        setFetchError(e.error || `Server error ${res.status}`);
         return;
       }
       const data = await res.json();
@@ -158,20 +158,23 @@ const OptionChain = ({ onClose }) => {
     } finally {
       setLoading(false);
     }
-  }, [symbol]); // only symbol matters — not marketClosed
+  }, [symbol]);
 
-  // ✅ FIX 2: removed `marketClosed` from useEffect deps.
-  //    Previously: every fetch called setMarketClosed(false/true) → triggered this
-  //    effect again → setLoading(true) + setChainData([]) → blank screen flash
-  //    and a second fetch immediately wiping the first successful response.
-  //    Fix: read marketClosed via a ref inside the interval so the value stays
-  //    current without being a reactive dependency that restarts the effect.
-  const marketClosedRef = useRef(marketClosed);
+  // ✅ FIX 2: removed marketClosed from deps — it triggered a second fetch+clear
+  //    every time fetchChain ran (setMarketClosed → effect re-fires → setChainData([])
+  //    → blank flash before re-render with data). marketClosed is read via ref instead.
+  const marketClosedRef = useRef(false);
   useEffect(() => { marketClosedRef.current = marketClosed; }, [marketClosed]);
 
   useEffect(() => {
+    // ✅ FIX 3: clear expiry immediately on symbol switch so the old symbol's
+    //    expiry date (e.g. NIFTY "Tue 24 Mar") never shows while SENSEX is loading.
     setLoading(true);
     setChainData([]);
+    setExpiry("");
+    setSpotPrice(null);
+    setAtmStrike(null);
+    setFetchError(null);
     setLots(1);
     fetchChain();
     const itv = setInterval(fetchChain, marketClosedRef.current ? 60000 : 5000);
