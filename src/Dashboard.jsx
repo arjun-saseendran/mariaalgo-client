@@ -1059,6 +1059,29 @@ const Dashboard = () => {
                       </div>
                     )}
 
+                    {/* Profit Lock pending banner */}
+                    {row.profitLockPending && (
+                      <div className="flex items-center gap-2 bg-green-500/8 border border-green-500/25 rounded-lg px-3 py-2">
+                        <TrendingUp size={11} className="text-green-400" />
+                        <span className="text-[9px] font-black text-green-400 uppercase tracking-widest">
+                          80% Profit — {row.profitLockSide?.toUpperCase()} side · Exit &amp; Re-enter at min premium
+                        </span>
+                        <button
+                          onClick={async () => {
+                            const res = await fetch(`${IC_URL}/api/trades/profit-lock`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ side: row.profitLockSide }),
+                            });
+                            if (!res.ok) alert("Profit Lock failed: " + (await res.json().catch(() => ({}))).error);
+                          }}
+                          className="ml-auto px-3 py-1 bg-green-500/15 hover:bg-green-500/25 border border-green-500/30 text-green-400 text-[9px] font-black uppercase tracking-widest rounded-md transition-all"
+                        >
+                          Lock Profit 💰
+                        </button>
+                      </div>
+                    )}
+
                     {/* Butterfly pending banner */}
                     {row.butterflyPending && !row.isButterfly && (
                       <div className="flex items-center gap-2 bg-purple-500/8 border border-purple-500/25 rounded-lg px-3 py-2">
